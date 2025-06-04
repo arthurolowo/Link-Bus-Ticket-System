@@ -26,15 +26,15 @@ export default function Header() {
       <a href="/" className="text-muted-foreground hover:text-primary transition-colors font-medium">
         Home
       </a>
-      <a href="#routes" className="text-muted-foreground hover:text-primary transition-colors font-medium">
+      <a href="/routes" className="text-muted-foreground hover:text-primary transition-colors font-medium">
         Routes
       </a>
       {isAuthenticated && (
-        <a href="#bookings" className="text-muted-foreground hover:text-primary transition-colors font-medium">
+        <a href="/#bookings" className="text-muted-foreground hover:text-primary transition-colors font-medium">
           My Bookings
         </a>
       )}
-      <a href="#support" className="text-muted-foreground hover:text-primary transition-colors font-medium">
+      <a href="/support" className="text-muted-foreground hover:text-primary transition-colors font-medium">
         Support
       </a>
     </nav>
