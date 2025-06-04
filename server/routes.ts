@@ -64,6 +64,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Weekly schedule endpoint
+  app.get('/api/trips/weekly', async (req, res) => {
+    try {
+      const trips = await storage.getWeeklySchedule();
+      res.json(trips);
+    } catch (error) {
+      console.error('Error fetching weekly schedule:', error);
+      res.status(500).json({ message: 'Failed to fetch weekly schedule' });
+    }
+  });
+
   app.get("/api/trips/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);

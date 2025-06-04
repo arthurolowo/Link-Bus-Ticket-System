@@ -34,6 +34,12 @@ export default function Home() {
     enabled: activeTab === "bookings",
   });
 
+  // Fetch weekly schedule data
+  const { data: weeklySchedule, isLoading: isLoadingSchedule } = useQuery({
+    queryKey: ['/api/trips/weekly'],
+    enabled: activeTab === "schedule",
+  });
+
   const handleSearch = (params: SearchParams) => {
     setSearchParams(params);
     setShowResults(true);
@@ -68,10 +74,14 @@ export default function Home() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:w-96">
+          <TabsList className="grid w-full grid-cols-3 lg:w-[500px]">
             <TabsTrigger value="search" className="flex items-center gap-2">
               <MapPin className="w-4 h-4" />
               Search & Book
+            </TabsTrigger>
+            <TabsTrigger value="schedule" className="flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Weekly Schedule
             </TabsTrigger>
             <TabsTrigger value="bookings" className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
@@ -90,6 +100,145 @@ export default function Home() {
                 onBackToSearch={() => setShowResults(false)}
               />
             )}
+          </TabsContent>
+
+          <TabsContent value="schedule" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="w-5 h-5" />
+                  Weekly Bus Schedule
+                </CardTitle>
+                <p className="text-muted-foreground">
+                  View all bus departures for the next 7 days across all routes
+                </p>
+              </CardHeader>
+              <CardContent>
+                {isLoadingSchedule ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+                  </div>
+                ) : !weeklySchedule || (weeklySchedule as any[]).length === 0 ? (
+                  <div className="text-center py-8">
+                    <Clock className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-foreground mb-2">No schedules available</h3>
+                    <p className="text-muted-foreground">
+                      Check back later for updated bus schedules
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Group trips by date */}
+                    {Object.entries(
+                      (weeklySchedule as any[]).reduce((groups, trip) => {
+                        const date = trip.departureDate;
+                        if (!groups[date]) groups[date] = [];
+                        groups[date].push(trip);
+                        return groups;
+                      }, {})
+                    ).map(([date, dateTrips]) => (
+                      <div key={date} className="space-y-4">
+                        <div className="flex items-center gap-4">
+                          <h3 className="text-xl font-semibold">
+                            {new Date(date).toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                          </h3>
+                          <Badge variant="secondary">
+                            {(dateTrips as any[]).length} trips
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {(dateTrips as any[]).sort((a, b) => a.departureTime.localeCompare(b.departureTime)).map((trip) => (
+                            <Card key={trip.id} className="hover:shadow-md transition-shadow">
+                              <CardContent className="p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
+                                      <span className="text-white text-xs font-bold">
+                                        {trip.bus.busNumber}
+                                      </span>
+                                    </div>
+                                    <Badge className={`text-xs ${
+                                      trip.bus.busType.name === 'Luxury' ? 'bg-purple-100 text-purple-800' :
+                                      trip.bus.busType.name === 'Executive' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {trip.bus.busType.name}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm font-semibold text-primary">
+                                      UGX {parseFloat(trip.price).toLocaleString()}
+                                    </p>
+                                  </div>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Route:</span>
+                                    <span className="font-medium">
+                                      {trip.route.origin} → {trip.route.destination}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Departure:</span>
+                                    <span className="font-medium flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      {trip.departureTime}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Arrival:</span>
+                                    <span className="font-medium">
+                                      {trip.arrivalTime}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Available:</span>
+                                    <span className={`font-medium ${
+                                      trip.availableSeats > 10 ? 'text-green-600' : 
+                                      trip.availableSeats > 3 ? 'text-yellow-600' : 'text-red-600'
+                                    }`}>
+                                      {trip.availableSeats} seats
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                <Button 
+                                  size="sm" 
+                                  className="w-full mt-3 btn-accent"
+                                  disabled={trip.availableSeats === 0}
+                                  onClick={() => {
+                                    setSearchParams({
+                                      origin: trip.route.origin,
+                                      destination: trip.route.destination,
+                                      date: trip.departureDate,
+                                      passengers: 1
+                                    });
+                                    setShowResults(true);
+                                    setActiveTab("search");
+                                  }}
+                                >
+                                  {trip.availableSeats === 0 ? 'Sold Out' : 'Book This Trip'}
+                                </Button>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="bookings" className="space-y-6">
