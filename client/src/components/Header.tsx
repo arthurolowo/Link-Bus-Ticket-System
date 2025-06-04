@@ -4,14 +4,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Bus, Menu, User, LogOut, Settings, Calendar } from "lucide-react";
+import { Bus, Menu, User as UserIcon, LogOut, Settings, Calendar } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import type { User as UserType } from "@shared/schema";
 import { LANGUAGES } from "@/types";
 
 export default function Header() {
   const { user, isAuthenticated } = useAuth();
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [isOpen, setIsOpen] = useState(false);
+  
+  const typedUser = user as UserType | undefined;
 
   const handleLogout = () => {
     window.location.href = "/api/logout";
@@ -86,9 +89,9 @@ export default function Header() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src={user?.profileImageUrl} alt={user?.firstName || "User"} />
+                      <AvatarImage src={typedUser?.profileImageUrl || ""} alt={typedUser?.firstName || "User"} />
                       <AvatarFallback>
-                        {user?.firstName?.charAt(0) || user?.email?.charAt(0) || "U"}
+                        {typedUser?.firstName?.charAt(0) || typedUser?.email?.charAt(0) || "U"}
                       </AvatarFallback>
                     </Avatar>
                   </Button>
@@ -96,19 +99,19 @@ export default function Header() {
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                   <div className="flex items-center justify-start gap-2 p-2">
                     <div className="flex flex-col space-y-1 leading-none">
-                      {user?.firstName && (
-                        <p className="font-medium">{user.firstName} {user.lastName}</p>
+                      {typedUser?.firstName && (
+                        <p className="font-medium">{typedUser.firstName} {typedUser.lastName || ""}</p>
                       )}
-                      {user?.email && (
+                      {typedUser?.email && (
                         <p className="w-[200px] truncate text-sm text-muted-foreground">
-                          {user.email}
+                          {typedUser.email}
                         </p>
                       )}
                     </div>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
-                    <User className="mr-2 h-4 w-4" />
+                    <UserIcon className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem>

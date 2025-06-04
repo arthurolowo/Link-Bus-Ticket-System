@@ -21,11 +21,11 @@ export default function Routes() {
   });
 
   // Filter routes based on search criteria
-  const filteredRoutes = routes?.filter((route: BusRoute) => {
+  const filteredRoutes = (routes as BusRoute[] || []).filter((route: BusRoute) => {
     const originMatch = !searchOrigin || route.origin.toLowerCase().includes(searchOrigin.toLowerCase());
     const destinationMatch = !searchDestination || route.destination.toLowerCase().includes(searchDestination.toLowerCase());
     return originMatch && destinationMatch;
-  }) || [];
+  });
 
   // Sort routes
   const sortedRoutes = [...filteredRoutes].sort((a, b) => {
