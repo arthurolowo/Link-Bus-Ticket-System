@@ -22,8 +22,8 @@ export default function Routes() {
 
   // Filter routes based on search criteria
   const filteredRoutes = (routes as BusRoute[] || []).filter((route: BusRoute) => {
-    const originMatch = !searchOrigin || route.origin.toLowerCase().includes(searchOrigin.toLowerCase());
-    const destinationMatch = !searchDestination || route.destination.toLowerCase().includes(searchDestination.toLowerCase());
+    const originMatch = !searchOrigin || searchOrigin === "all" || route.origin.toLowerCase().includes(searchOrigin.toLowerCase());
+    const destinationMatch = !searchDestination || searchDestination === "all" || route.destination.toLowerCase().includes(searchDestination.toLowerCase());
     return originMatch && destinationMatch;
   });
 
@@ -85,7 +85,7 @@ export default function Routes() {
                     <SelectValue placeholder="Select origin" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All cities</SelectItem>
+                    <SelectItem value="all">All cities</SelectItem>
                     {UGANDAN_CITIES.map((city) => (
                       <SelectItem key={city} value={city}>{city}</SelectItem>
                     ))}
@@ -100,7 +100,7 @@ export default function Routes() {
                     <SelectValue placeholder="Select destination" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All cities</SelectItem>
+                    <SelectItem value="all">All cities</SelectItem>
                     {UGANDAN_CITIES.map((city) => (
                       <SelectItem key={city} value={city}>{city}</SelectItem>
                     ))}
