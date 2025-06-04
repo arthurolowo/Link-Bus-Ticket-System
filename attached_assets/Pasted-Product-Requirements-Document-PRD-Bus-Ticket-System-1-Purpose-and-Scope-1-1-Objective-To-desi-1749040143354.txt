@@ -1,0 +1,143 @@
+Product Requirements Document (PRD): Bus Ticket System
+
+1. Purpose and Scope
+
+1.1 Objective
+
+To design and develop a bus ticket system that enables customers to book, manage, and purchase bus tickets online or via a mobile app, while providing the bus company with tools to manage schedules, routes, pricing, and bookings efficiently.
+
+1.2 Scope
+
+The system will include:
+
+
+
+
+
+A customer Rosette web and mobile application for customers to search and book tickets.
+
+
+
+An admin panel for the bus company to manage operations.
+
+
+
+Payment integration for secure transactions.
+
+
+
+Real-time seat availability and booking status.
+
+
+
+Support for multiple languages and accessibility features.
+
+The system excludes:
+
+
+
+
+
+Physical ticket counters or kiosks.
+
+
+
+Offline booking processes.
+
+2. Target Users
+
+
+
+
+
+Customers: Individuals looking to book bus tickets conveniently.
+
+
+
+Bus Company Staff: Employees managing schedules, routes, and bookings.
+
+
+
+Administrators: System managers overseeing operations and analytics.
+
+3. User Stories
+
+
+
+
+
+As a customer, I want to search for bus routes by entering my departure city, destination, and travel date, so I can find available trips that suit my schedule.
+
+
+
+As a customer, I want to select my seat and pay securely online, so I can confirm my booking without hassle.
+
+
+
+As a customer, I want to receive a digital ticket via email or mobile app, so I can board the bus easily.
+
+
+
+As a bus company staff member, I want to update bus schedules and availability, so customers see accurate information.
+
+
+
+As an administrator, I want to view booking analytics and revenue reports, so I can make informed business decisions.
+
+4. Functional Requirements
+
+4.1 Customer-Facing Features
+
+
+
+
+
+Search and Filter: Search for routes by origin, destination, date, and time. Filter by price, duration, or bus type (e.g., standard, luxury).
+
+
+
+Seat Selection: Interactive seat map to choose preferred seats.
+
+
+
+Booking Management: View, modify, or cancel bookings via a user account.
+
+
+
+Payment Integration: Support for credit/debit cards, mobile payments (e.g., PayPal, Stripe), and regional payment methods.
+
+
+
+Digital Tickets: QR code-based tickets sent via email or accessible in the app.
+
+
+
+Notifications: Email and push notifications for booking confirmation, reminders, and updates (e.g., delays).
+
+
+
+Multi-language Support: Interface available in at least English, Spanish, and one regional language.
+
+
+
+Accessibility: Compliance with WCAG 2.1 for screen reader support and keyboard navigation.
+
+4.2 Admin Features
+
+
+
+
+
+Schedule Management: Add, edit, or remove bus routes, schedules, and pricing.
+
+
+
+Booking Oversight: View all bookings, filter by date or route, and update statuses (e.g., confirmed, canceled).
+
+
+
+Analytics Dashboard: Real-time data on bookings, revenue, and popular routes.
+
+
+
+User Management: Manage customer accounts and handle refund requests.
