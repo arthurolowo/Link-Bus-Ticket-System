@@ -1,3 +1,5 @@
+import 'dotenv/config';
+console.log('DATABASE_URL:', process.env.DATABASE_URL);
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -61,10 +63,8 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   const port = 5000;
   server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
+    port
   }, () => {
-    log(`serving on port ${port}`);
+    log(`serving on port ${5000}`);
   });
 })();

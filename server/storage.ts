@@ -21,7 +21,7 @@ import {
   type BookingWithDetails,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -47,6 +47,7 @@ export interface IStorage {
   getTripById(id: number): Promise<TripWithDetails | undefined>;
   createTrip(trip: InsertTrip): Promise<Trip>;
   updateTripAvailability(tripId: number, seatsToBook: number): Promise<boolean>;
+  getWeeklySchedule(): Promise<TripWithDetails[]>;
 
   // Booking operations
   createBooking(booking: InsertBooking): Promise<Booking>;
@@ -307,6 +308,37 @@ export class DatabaseStorage implements IStorage {
       .where(eq(bookings.id, id))
       .returning();
     return !!updatedBooking;
+  }
+
+  // Trip operations
+  async getWeeklySchedule(): Promise<TripWithDetails[]> {
+    // Get today's date and the date 7 days from now
+    const today = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7);
+    const todayStr = today.toISOString().slice(0, 10);
+    const nextWeekStr = nextWeek.toISOString().slice(0, 10);
+
+    // Query trips in the next 7 days (inclusive)
+    const tripsThisWeek = await db
+      .select()
+      .from(trips)
+      .leftJoin(routes, eq(trips.routeId, routes.id))
+      .leftJoin(buses, eq(trips.busId, buses.id))
+      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .where(and(
+        gte(trips.departureDate, todayStr),
+        lte(trips.departureDate, nextWeekStr)
+      ));
+
+    return tripsThisWeek.map(row => ({
+      ...row.trips,
+      route: row.routes!,
+      bus: {
+        ...row.buses!,
+        busType: row.bus_types!,
+      },
+    }));
   }
 
   // Analytics

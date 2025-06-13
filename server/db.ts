@@ -1,4 +1,8 @@
+import 'dotenv/config';
+console.log('[db.ts] DATABASE_URL:', process.env.DATABASE_URL);
 import { Pool, neonConfig } from '@neondatabase/serverless';
+// ...rest of your code
+console.log('[db.ts] DATABASE_URL:', process.env.DATABASE_URL);import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
 import * as schema from "@shared/schema";

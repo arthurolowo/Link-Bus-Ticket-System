@@ -1,25 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+
 import { insertRouteSchema, insertTripSchema, insertBookingSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
-
-  // Auth routes
-  app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
-  });
 
   // Route management
   app.get("/api/routes", async (req, res) => {
@@ -32,7 +18,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/routes", isAuthenticated, async (req, res) => {
+  app.post("/api/routes", async (req, res) => {
     try {
       const routeData = insertRouteSchema.parse(req.body);
       const route = await storage.createRoute(routeData);
@@ -91,7 +77,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/trips", isAuthenticated, async (req, res) => {
+  app.post("/api/trips", async (req, res) => {
     try {
       const tripData = insertTripSchema.parse(req.body);
       const trip = await storage.createTrip(tripData);
@@ -108,6 +94,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bookingData = insertBookingSchema.parse(req.body);
       
       // Check seat availability and update trip
+      if (typeof bookingData.tripId !== "number") {
+        return res.status(400).json({ message: "Invalid trip ID" });
+      }
       const trip = await storage.getTripById(bookingData.tripId);
       if (!trip) {
         return res.status(404).json({ message: "Trip not found" });
@@ -125,7 +114,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const booking = await storage.createBooking(bookingData);
       
       // Update trip availability
-      await storage.updateTripAvailability(bookingData.tripId, seatCount);
+      if (typeof bookingData.tripId === "number") {
+        await storage.updateTripAvailability(bookingData.tripId, seatCount);
+      } else {
+        return res.status(400).json({ message: "Invalid trip ID" });
+      }
       
       res.json(booking);
     } catch (error) {
@@ -149,19 +142,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/bookings", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const bookings = await storage.getUserBookings(userId);
-      res.json(bookings);
-    } catch (error) {
-      console.error("Error fetching user bookings:", error);
-      res.status(500).json({ message: "Failed to fetch bookings" });
-    }
-  });
-
   // Admin routes
-  app.get("/api/admin/bookings", isAuthenticated, async (req, res) => {
+
+  app.get("/api/bookings", async (req, res) => {
     try {
       const bookings = await storage.getAllBookings();
       res.json(bookings);
@@ -171,7 +154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/stats", isAuthenticated, async (req, res) => {
+  app.get("/api/stats", async (req, res) => {
     try {
       const stats = await storage.getBookingStats();
       res.json(stats);
@@ -214,7 +197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bus management
-  app.get("/api/buses", isAuthenticated, async (req, res) => {
+  app.get("/api/buses", async (req, res) => {
     try {
       const buses = await storage.getAllBuses();
       res.json(buses);
@@ -222,6 +205,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching buses:", error);
       res.status(500).json({ message: "Failed to fetch buses" });
     }
+  });
+
+  // Support/contact endpoint
+  app.post("/api/support", async (req, res) => {
+    const { name, email, phone, subject, category, message } = req.body;
+    if (!name || !email || !message) {
+      return res.status(400).json({ message: "Name, email, and message are required." });
+    }
+    // Here you could store the message in the database or send an email/notification
+    // For now, just log it
+    console.log("Support message received:", { name, email, phone, subject, category, message });
+    return res.json({ success: true, message: "Support message received." });
   });
 
   const httpServer = createServer(app);

@@ -23,6 +23,13 @@ import type { BookingWithDetails } from "@shared/schema";
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("");
+  const [filterPhone, setFilterPhone] = useState("");
+  const [filterOrigin, setFilterOrigin] = useState("");
+  const [filterDestination, setFilterDestination] = useState("");
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
 
   const { data: stats, isLoading: isLoadingStats } = useQuery({
     queryKey: ['/api/admin/stats'],
@@ -32,12 +39,29 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/bookings'],
   });
 
-  const filteredBookings = bookings?.filter((booking: BookingWithDetails) =>
-    booking.bookingReference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    booking.passengerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    booking.trip.route.origin.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    booking.trip.route.destination.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const filteredBookings = (bookings || []).filter((booking: BookingWithDetails) => {
+    // Text search
+    const matchesSearch = !searchTerm ||
+      booking.bookingReference.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.passengerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.trip.route.origin.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.trip.route.destination.toLowerCase().includes(searchTerm.toLowerCase());
+    // Payment status filter
+    const matchesPaymentStatus = !filterPaymentStatus || booking.paymentStatus === filterPaymentStatus;
+    // Booking status filter
+    const matchesStatus = !filterStatus || booking.bookingStatus === filterStatus;
+    // Phone filter
+    const matchesPhone = !filterPhone || booking.passengerPhone.includes(filterPhone);
+    // Origin filter
+    const matchesOrigin = !filterOrigin || booking.trip.route.origin === filterOrigin;
+    // Destination filter
+    const matchesDestination = !filterDestination || booking.trip.route.destination === filterDestination;
+    // Date range filter
+    const depDate = new Date(booking.trip.departureDate);
+    const matchesStartDate = !filterStartDate || depDate >= new Date(filterStartDate);
+    const matchesEndDate = !filterEndDate || depDate <= new Date(filterEndDate);
+    return matchesSearch && matchesPaymentStatus && matchesStatus && matchesPhone && matchesOrigin && matchesDestination && matchesStartDate && matchesEndDate;
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -241,15 +265,94 @@ export default function AdminDashboard() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <CardTitle>All Bookings</CardTitle>
                   <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-                      <Input
-                        placeholder="Search bookings..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 w-64"
-                      />
-                    </div>
+                    {activeTab === "bookings" && (
+                      <div className="overflow-x-auto">
+                        {/* Advanced Filters */}
+                        <div className="flex flex-wrap gap-2 md:gap-4 mb-4 items-center">
+                          <input
+                            type="text"
+                            placeholder="Search by reference, name, city..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="input input-bordered w-full md:w-56"
+                          />
+                          <select
+                            value={filterStatus}
+                            onChange={e => setFilterStatus(e.target.value)}
+                            className="select select-bordered w-full md:w-40"
+                          >
+                            <option value="">All Statuses</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                          <select
+                            value={filterPaymentStatus}
+                            onChange={e => setFilterPaymentStatus(e.target.value)}
+                            className="select select-bordered w-full md:w-40"
+                          >
+                            <option value="">All Payments</option>
+                            <option value="paid">Paid</option>
+                            <option value="pending">Pending</option>
+                            <option value="failed">Failed</option>
+                          </select>
+                          <input
+                            type="text"
+                            placeholder="Phone"
+                            value={filterPhone}
+                            onChange={e => setFilterPhone(e.target.value)}
+                            className="input input-bordered w-full md:w-32"
+                          />
+                          <select
+                            value={filterOrigin}
+                            onChange={e => setFilterOrigin(e.target.value)}
+                            className="select select-bordered w-full md:w-32"
+                          >
+                            <option value="">All Origins</option>
+                            {Array.from(new Set((bookings||[]).map(b => b.trip.route.origin))).map(origin => (
+                              <option key={origin} value={origin}>{origin}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={filterDestination}
+                            onChange={e => setFilterDestination(e.target.value)}
+                            className="select select-bordered w-full md:w-32"
+                          >
+                            <option value="">All Destinations</option>
+                            {Array.from(new Set((bookings||[]).map(b => b.trip.route.destination))).map(dest => (
+                              <option key={dest} value={dest}>{dest}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="date"
+                            value={filterStartDate}
+                            onChange={e => setFilterStartDate(e.target.value)}
+                            className="input input-bordered w-full md:w-36"
+                            placeholder="Start date"
+                          />
+                          <input
+                            type="date"
+                            value={filterEndDate}
+                            onChange={e => setFilterEndDate(e.target.value)}
+                            className="input input-bordered w-full md:w-36"
+                            placeholder="End date"
+                          />
+                          <button
+                            className="btn btn-outline btn-sm md:ml-2"
+                            onClick={() => {
+                              setFilterStatus("");
+                              setFilterPaymentStatus("");
+                              setFilterPhone("");
+                              setFilterOrigin("");
+                              setFilterDestination("");
+                              setFilterStartDate("");
+                              setFilterEndDate("");
+                            }}
+                          >
+                            Clear Filters
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <Button variant="outline" size="sm">
                       <Download className="w-4 h-4 mr-1" />
                       Export

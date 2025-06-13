@@ -41,9 +41,16 @@ export default function Support() {
 
   const submitContactMutation = useMutation({
     mutationFn: async (formData: typeof contactForm) => {
-      // In a real implementation, this would send to a support endpoint
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { success: true };
+      const response = await fetch('/api/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Failed to send message');
+      }
+      return response.json();
     },
     onSuccess: () => {
       toast({
