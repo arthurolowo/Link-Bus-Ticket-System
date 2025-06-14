@@ -19,8 +19,24 @@ import {
   type Booking,
   type InsertBooking,
   type BookingWithDetails,
-} from "@shared/schema";
-import { db } from "./db";
+} from "./schema";
+import 'dotenv/config';
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import ws from "ws";
+
+import * as schema from "./schema";
+
+neonConfig.webSocketConstructor = ws;
+
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL must be set. Did you forget to provision a database?",
+  );
+}
+
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const db = drizzle({ client: pool, schema });
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -89,7 +105,7 @@ export class DatabaseStorage implements IStorage {
 
   // Route operations
   async getAllRoutes(): Promise<Route[]> {
-    return await db.select().from(routes).where(eq(routes.isActive, true));
+    return await db.select().from(routes).where(eq(routes.is_active, 1));
   }
 
   async createRoute(route: InsertRoute): Promise<Route> {
@@ -109,7 +125,7 @@ export class DatabaseStorage implements IStorage {
   async deleteRoute(id: number): Promise<boolean> {
     const [deletedRoute] = await db
       .update(routes)
-      .set({ isActive: false })
+      .set({ is_active: 0 })
       .where(eq(routes.id, id))
       .returning();
     return !!deletedRoute;
@@ -131,7 +147,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(buses)
       .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .where(eq(buses.isActive, true))
+      .where(eq(buses.is_active, 1))
       .then(rows => 
         rows.map(row => ({
           ...row.buses,
@@ -361,7 +377,7 @@ export class DatabaseStorage implements IStorage {
     const [routeCount] = await db
       .select({ count: sql<number>`count(*)` })
       .from(routes)
-      .where(eq(routes.isActive, true));
+      .where(eq(routes.is_active, 1));
 
     // Simple occupancy calculation
     const occupancyRate = 85; // Mock value for now
