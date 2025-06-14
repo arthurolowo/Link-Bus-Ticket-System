@@ -24,6 +24,16 @@ export default function Landing() {
   const { data: trips, isLoading: isSearching } = useQuery({
     queryKey: ['/api/trips/search', searchParams.origin, searchParams.destination, searchParams.date],
     enabled: showResults && !!searchParams.origin && !!searchParams.destination && !!searchParams.date,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        origin: searchParams.origin,
+        destination: searchParams.destination,
+        date: searchParams.date,
+      });
+      const res = await fetch(`/api/trips/search?${params.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
   });
 
   const handleSearch = () => {
