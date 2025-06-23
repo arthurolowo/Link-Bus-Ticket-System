@@ -1,10 +1,20 @@
-import type { Express } from "express";
+import type { Express, Request, Response, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-
-import { insertRouteSchema, InsertRoute } from "./schema";
+import authRoutes from "./routes/auth";
+import { verifyToken, AuthRequest } from "./middleware/auth";
+import { 
+  routeSchema, 
+  busSchema, 
+  busTypeSchema, 
+  tripSchema, 
+  bookingSchema,
+  userSchema
+} from "./schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Register auth routes
+  app.use('/api/auth', authRoutes);
 
   // Route management
   app.get("/api/routes", async (req, res) => {
@@ -17,15 +27,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/routes", async (req, res) => {
+  app.post("/api/routes", verifyToken, async (req: Request, res: Response) => {
     try {
-      const parsed = insertRouteSchema.parse(req.body);
-      const routeData: InsertRoute = {
-        ...parsed,
-        distance: parsed.distance === undefined ? null : parsed.distance,
-        estimatedDuration: parsed.estimatedDuration === undefined ? null : parsed.estimatedDuration,
-        isActive: parsed.isActive === undefined ? null : parsed.isActive,
-      };
+      const routeData = routeSchema.parse(req.body);
       const route = await storage.createRoute(routeData);
       res.json(route);
     } catch (error) {
@@ -34,164 +38,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Trip search and management
-  app.get("/api/trips/search", async (req, res) => {
-    try {
-      const { origin, destination, date } = req.query;
-      
-      if (!origin || !destination || !date) {
-        return res.status(400).json({ message: "Missing required parameters" });
-      }
-
-      const trips = await storage.searchTrips(
-        origin as string,
-        destination as string,
-        date as string
-      );
-      res.json(trips);
-    } catch (error) {
-      console.error("Error searching trips:", error);
-      res.status(500).json({ message: "Failed to search trips" });
-    }
-  });
-
-  // Weekly schedule endpoint
-  app.get('/api/trips/weekly', async (req, res) => {
-    try {
-      const trips = await storage.getWeeklySchedule();
-      res.json(trips);
-    } catch (error) {
-      console.error('Error fetching weekly schedule:', error);
-      res.status(500).json({ message: 'Failed to fetch weekly schedule' });
-    }
-  });
-
-  app.get("/api/trips/:id", async (req, res) => {
+  app.put("/api/routes/:id", verifyToken, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const trip = await storage.getTripById(id);
+      const routeData = routeSchema.partial().parse(req.body);
+      const updatedRoute = await storage.updateRoute(id, routeData);
       
-      if (!trip) {
-        return res.status(404).json({ message: "Trip not found" });
+      if (!updatedRoute) {
+        return res.status(404).json({ message: "Route not found" });
       }
       
-      res.json(trip);
+      res.json(updatedRoute);
     } catch (error) {
-      console.error("Error fetching trip:", error);
-      res.status(500).json({ message: "Failed to fetch trip" });
+      console.error("Error updating route:", error);
+      res.status(400).json({ message: "Invalid route data" });
     }
   });
 
-  app.post("/api/trips", async (req, res) => {
+  app.delete("/api/routes/:id", verifyToken, async (req: Request, res: Response) => {
     try {
-      // TODO: Add Zod validation for trip creation
-      const tripData = req.body as any;
-      const trip = await storage.createTrip(tripData);
-      res.json(trip);
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteRoute(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Route not found" });
+      }
+      
+      res.json({ message: "Route deleted successfully" });
     } catch (error) {
-      console.error("Error creating trip:", error);
-      res.status(400).json({ message: "Invalid trip data" });
-    }
-  });
-
-  // Booking management
-  app.post("/api/bookings", async (req, res) => {
-    try {
-      // TODO: Add Zod validation for booking creation
-      const bookingData = req.body as any;
-      
-      // Check seat availability and update trip
-      if (typeof bookingData.tripId !== "number") {
-        return res.status(400).json({ message: "Invalid trip ID" });
-      }
-      const trip = await storage.getTripById(bookingData.tripId);
-      if (!trip) {
-        return res.status(404).json({ message: "Trip not found" });
-      }
-
-      const seatCount = Array.isArray(bookingData.seatNumbers) 
-        ? bookingData.seatNumbers.length 
-        : 1;
-
-      if (trip.availableSeats == null) {
-        return res.status(400).json({ message: "Trip available seats is not set" });
-      }
-      if (trip.availableSeats < seatCount) {
-        return res.status(400).json({ message: "Not enough seats available" });
-      }
-
-      // Create booking
-      const booking = await storage.createBooking(bookingData);
-      
-      // Update trip availability
-      if (typeof bookingData.tripId === "number") {
-        await storage.updateTripAvailability(bookingData.tripId, seatCount);
-      } else {
-        return res.status(400).json({ message: "Invalid trip ID" });
-      }
-      
-      res.json(booking);
-    } catch (error) {
-      console.error("Error creating booking:", error);
-      res.status(400).json({ message: "Invalid booking data" });
-    }
-  });
-
-  app.get("/api/bookings/:reference", async (req, res) => {
-    try {
-      const booking = await storage.getBookingByReference(req.params.reference);
-      
-      if (!booking) {
-        return res.status(404).json({ message: "Booking not found" });
-      }
-      
-      res.json(booking);
-    } catch (error) {
-      console.error("Error fetching booking:", error);
-      res.status(500).json({ message: "Failed to fetch booking" });
-    }
-  });
-
-  // Admin routes
-
-  app.get("/api/bookings", async (req, res) => {
-    try {
-      const bookings = await storage.getAllBookings();
-      res.json(bookings);
-    } catch (error) {
-      console.error("Error fetching all bookings:", error);
-      res.status(500).json({ message: "Failed to fetch bookings" });
-    }
-  });
-
-  app.get("/api/stats", async (req, res) => {
-    try {
-      const stats = await storage.getBookingStats();
-      res.json(stats);
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-      res.status(500).json({ message: "Failed to fetch statistics" });
-    }
-  });
-
-  // Payment processing (mock implementation)
-  app.post("/api/payments/process", async (req, res) => {
-    try {
-      const { bookingId, paymentMethod } = req.body;
-      
-      // Mock payment processing
-      const success = Math.random() > 0.1; // 90% success rate
-      
-      if (success) {
-        await storage.updateBookingPaymentStatus(bookingId, "completed");
-        res.json({ success: true, message: "Payment processed successfully" });
-      } else {
-        await storage.updateBookingPaymentStatus(bookingId, "failed");
-        res.status(400).json({ success: false, message: "Payment failed" });
-      }
-    } catch (error) {
-      console.error("Error processing payment:", error);
-      res.status(500).json({ message: "Payment processing error" });
+      console.error("Error deleting route:", error);
+      res.status(500).json({ message: "Failed to delete route" });
     }
   });
 
@@ -206,6 +82,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/bus-types", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const busTypeData = busTypeSchema.parse(req.body);
+      const busType = await storage.createBusType(busTypeData);
+      res.json(busType);
+    } catch (error) {
+      console.error("Error creating bus type:", error);
+      res.status(400).json({ message: "Invalid bus type data" });
+    }
+  });
+
+  app.put("/api/bus-types/:id", verifyToken, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const busTypeData = busTypeSchema.partial().parse(req.body);
+      // TODO: Implement updateBusType in storage
+      return res.status(501).json({ message: "Not implemented" });
+    } catch (error) {
+      console.error("Error updating bus type:", error);
+      res.status(400).json({ message: "Invalid bus type data" });
+    }
+  });
+
+  app.delete("/api/bus-types/:id", verifyToken, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      // TODO: Implement deleteBusType in storage
+      return res.status(501).json({ message: "Not implemented" });
+    } catch (error) {
+      console.error("Error deleting bus type:", error);
+      res.status(500).json({ message: "Failed to delete bus type" });
+    }
+  });
+
   // Bus management
   app.get("/api/buses", async (req, res) => {
     try {
@@ -217,16 +127,248 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Support/contact endpoint
-  app.post("/api/support", async (req, res) => {
-    const { name, email, phone, subject, category, message } = req.body;
-    if (!name || !email || !message) {
-      return res.status(400).json({ message: "Name, email, and message are required." });
+  app.post("/api/buses", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const busData = busSchema.parse(req.body);
+      const bus = await storage.createBus(busData);
+      res.json(bus);
+    } catch (error) {
+      console.error("Error creating bus:", error);
+      res.status(400).json({ message: "Invalid bus data" });
     }
-    // Here you could store the message in the database or send an email/notification
-    // For now, just log it
-    console.log("Support message received:", { name, email, phone, subject, category, message });
-    return res.json({ success: true, message: "Support message received." });
+  });
+
+  app.put("/api/buses/:id", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const busData = busSchema.partial().parse(req.body);
+      const updatedBus = await storage.updateBus(id, busData);
+      
+      if (!updatedBus) {
+        return res.status(404).json({ message: "Bus not found" });
+      }
+      
+      res.json(updatedBus);
+    } catch (error) {
+      console.error("Error updating bus:", error);
+      res.status(400).json({ message: "Invalid bus data" });
+    }
+  });
+
+  app.delete("/api/buses/:id", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteBus(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Bus not found" });
+      }
+      
+      res.json({ message: "Bus deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting bus:", error);
+      res.status(500).json({ message: "Failed to delete bus" });
+    }
+  });
+
+  // Trip management
+  app.get("/api/trips/search", async (req, res) => {
+    try {
+      const { origin, destination, date, minTime, maxTime, minPrice, maxPrice, busType } = req.query;
+      
+      if (!origin || !destination || !date) {
+        return res.status(400).json({ message: "Missing required parameters" });
+      }
+
+      const trips = await storage.searchTrips(
+        origin as string,
+        destination as string,
+        date as string,
+        {
+          minTime: minTime as string | undefined,
+          maxTime: maxTime as string | undefined,
+          minPrice: minPrice as string | undefined,
+          maxPrice: maxPrice as string | undefined,
+          busType: busType as string | undefined,
+        }
+      );
+      res.json(trips);
+    } catch (error) {
+      console.error("Error searching trips:", error);
+      res.status(500).json({ message: "Failed to search trips" });
+    }
+  });
+
+  app.post("/api/trips", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const tripData = tripSchema.parse(req.body);
+      const trip = await storage.createTrip(tripData);
+      res.json(trip);
+    } catch (error) {
+      console.error("Error creating trip:", error);
+      res.status(400).json({ message: "Invalid trip data" });
+    }
+  });
+
+  app.put("/api/trips/:id", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const tripData = tripSchema.partial().parse(req.body);
+      const updatedTrip = await storage.updateTrip(id, tripData);
+      
+      if (!updatedTrip) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+      
+      res.json(updatedTrip);
+    } catch (error) {
+      console.error("Error updating trip:", error);
+      res.status(400).json({ message: "Invalid trip data" });
+    }
+  });
+
+  app.delete("/api/trips/:id", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.cancelTrip(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+      
+      res.json({ message: "Trip cancelled successfully" });
+    } catch (error) {
+      console.error("Error cancelling trip:", error);
+      res.status(500).json({ message: "Failed to cancel trip" });
+    }
+  });
+
+  // Booking management
+  app.post("/api/bookings", verifyToken, async (req: Request, res: Response) => {
+    try {
+      const bookingRef = `LB${Date.now().toString().slice(-6)}`;
+      const bookingData = {
+        ...bookingSchema.parse(req.body),
+        userId: req.user?.id,
+        bookingReference: bookingRef,
+        qrCode: `booking:${bookingRef}`,
+      };
+      
+      // Check seat availability
+      const trip = await storage.getTripById(bookingData.tripId);
+      if (!trip) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+
+      if (!trip.availableSeats || trip.availableSeats < 1) {
+        return res.status(400).json({ message: "No seats available" });
+      }
+
+      // Create booking
+      const booking = await storage.createBooking(bookingData);
+      
+      // Update trip availability
+      await storage.updateTripAvailability(bookingData.tripId, 1);
+      
+      res.json(booking);
+    } catch (error) {
+      console.error("Error creating booking:", error);
+      res.status(400).json({ message: "Invalid booking data" });
+    }
+  });
+
+  app.put("/api/bookings/:id", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const bookingData = bookingSchema.partial().parse(req.body);
+      const updatedBooking = await storage.updateBooking(id, bookingData);
+      
+      if (!updatedBooking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error("Error updating booking:", error);
+      res.status(400).json({ message: "Invalid booking data" });
+    }
+  });
+
+  app.delete("/api/bookings/:id", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.cancelBooking(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      res.json({ message: "Booking cancelled successfully" });
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+      res.status(500).json({ message: "Failed to cancel booking" });
+    }
+  });
+
+  // User profile management
+  app.put("/api/auth/me", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const userData = userSchema.partial().parse(req.body);
+      const updatedUser = await storage.updateUser(userId, userData);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(400).json({ message: "Invalid user data" });
+    }
+  });
+
+  // Password reset
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      await storage.initiatePasswordReset(email);
+      
+      // Always return success to prevent email enumeration
+      res.json({ message: "If the email exists, a reset link has been sent" });
+    } catch (error) {
+      console.error("Error initiating password reset:", error);
+      res.status(500).json({ message: "Failed to initiate password reset" });
+    }
+  });
+
+  // Analytics
+  app.get("/api/analytics/booking-stats", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const stats = await storage.getBookingStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching booking stats:", error);
+      res.status(500).json({ message: "Failed to fetch booking stats" });
+    }
+  });
+
+  app.get("/api/analytics/weekly-schedule", verifyToken, async (req: AuthRequest, res) => {
+    try {
+      const schedule = await storage.getWeeklySchedule();
+      res.json(schedule);
+    } catch (error) {
+      console.error("Error fetching weekly schedule:", error);
+      res.status(500).json({ message: "Failed to fetch weekly schedule" });
+    }
   });
 
   const httpServer = createServer(app);

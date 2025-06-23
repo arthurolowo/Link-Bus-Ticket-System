@@ -21,13 +21,10 @@ import {
   type BookingWithDetails,
 } from "./schema";
 import 'dotenv/config';
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
+import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
 
 import * as schema from "./schema";
-
-neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -36,13 +33,23 @@ if (!process.env.DATABASE_URL) {
 }
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+export const db = drizzle(pool, { schema });
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 
+export interface TripSearchFilters {
+  minTime?: string;
+  maxTime?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  busType?: string;
+}
+
 export interface IStorage {
-  // User operations (mandatory for Replit Auth)
+  // User operations
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateUser(id: string, user: Partial<User>): Promise<User | undefined>;
+  initiatePasswordReset(email: string): Promise<boolean>;
 
   // Route operations
   getAllRoutes(): Promise<Route[]>;
@@ -57,16 +64,22 @@ export interface IStorage {
   // Bus operations
   getAllBuses(): Promise<(Bus & { busType: BusType })[]>;
   createBus(bus: InsertBus): Promise<Bus>;
+  updateBus(id: number, bus: Partial<InsertBus>): Promise<Bus | undefined>;
+  deleteBus(id: number): Promise<boolean>;
 
   // Trip operations
-  searchTrips(origin: string, destination: string, date: string): Promise<TripWithDetails[]>;
+  searchTrips(origin: string, destination: string, date: string, filters?: TripSearchFilters): Promise<TripWithDetails[]>;
   getTripById(id: number): Promise<TripWithDetails | undefined>;
   createTrip(trip: InsertTrip): Promise<Trip>;
+  updateTrip(id: number, trip: Partial<InsertTrip>): Promise<Trip | undefined>;
   updateTripAvailability(tripId: number, seatsToBook: number): Promise<boolean>;
+  cancelTrip(id: number): Promise<boolean>;
   getWeeklySchedule(): Promise<TripWithDetails[]>;
 
   // Booking operations
   createBooking(booking: InsertBooking): Promise<Booking>;
+  updateBooking(id: number, booking: Partial<InsertBooking>): Promise<Booking | undefined>;
+  cancelBooking(id: number): Promise<boolean>;
   getBookingByReference(reference: string): Promise<BookingWithDetails | undefined>;
   getUserBookings(userId: string): Promise<BookingWithDetails[]>;
   getAllBookings(): Promise<BookingWithDetails[]>;
@@ -82,7 +95,7 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // User operations (mandatory for Replit Auth)
+  // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -103,13 +116,45 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async updateUser(id: string, userData: Partial<User>): Promise<User | undefined> {
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        ...userData,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning();
+    return updatedUser;
+  }
+
+  async initiatePasswordReset(email: string): Promise<boolean> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email));
+
+    if (!user) {
+      return false;
+    }
+
+    // TODO: Implement actual password reset logic
+    return true;
+  }
+
   // Route operations
   async getAllRoutes(): Promise<Route[]> {
-    return await db.select().from(routes).where(eq(routes.is_active, 1));
+    return await db.select().from(routes).where(eq(routes.isActive, 1));
   }
 
   async createRoute(route: InsertRoute): Promise<Route> {
-    const [newRoute] = await db.insert(routes).values(route).returning();
+    const [newRoute] = await db
+      .insert(routes)
+      .values({
+        ...route,
+        isActive: route.isActive ?? 1,
+      })
+      .returning();
     return newRoute;
   }
 
@@ -125,7 +170,7 @@ export class DatabaseStorage implements IStorage {
   async deleteRoute(id: number): Promise<boolean> {
     const [deletedRoute] = await db
       .update(routes)
-      .set({ is_active: 0 })
+      .set({ isActive: 0 })
       .where(eq(routes.id, id))
       .returning();
     return !!deletedRoute;
@@ -147,7 +192,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(buses)
       .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .where(eq(buses.is_active, 1))
+      .where(eq(buses.isActive, 1))
       .then(rows => 
         rows.map(row => ({
           ...row.buses,
@@ -161,53 +206,94 @@ export class DatabaseStorage implements IStorage {
     return newBus;
   }
 
+  async updateBus(id: number, busData: Partial<InsertBus>): Promise<Bus | undefined> {
+    const [updatedBus] = await db
+      .update(buses)
+      .set(busData)
+      .where(eq(buses.id, id))
+      .returning();
+    return updatedBus;
+  }
+
+  async deleteBus(id: number): Promise<boolean> {
+    const [deletedBus] = await db
+      .update(buses)
+      .set({ isActive: 0 })
+      .where(eq(buses.id, id))
+      .returning();
+    return !!deletedBus;
+  }
+
   // Trip operations
-  async searchTrips(origin: string, destination: string, date: string): Promise<TripWithDetails[]> {
-    return await db
-      .select()
+  async searchTrips(
+    origin: string,
+    destination: string,
+    date: string,
+    filters?: TripSearchFilters
+  ): Promise<TripWithDetails[]> {
+    const whereClauses = [
+      eq(routes.origin, origin),
+      eq(routes.destination, destination),
+      eq(trips.departureDate, date),
+      eq(trips.status, "scheduled"),
+      gte(trips.availableSeats, 1)
+    ];
+
+    if (filters) {
+      if (filters.minTime) whereClauses.push(gte(trips.departureTime, filters.minTime));
+      if (filters.maxTime) whereClauses.push(lte(trips.departureTime, filters.maxTime));
+      if (filters.minPrice) whereClauses.push(gte(trips.price, filters.minPrice));
+      if (filters.maxPrice) whereClauses.push(lte(trips.price, filters.maxPrice));
+      if (filters.busType) whereClauses.push(eq(busTypes.name, filters.busType));
+    }
+
+    const results = await db
+      .select({
+        trip: trips,
+        route: routes,
+        bus: buses,
+        busType: busTypes,
+      })
       .from(trips)
       .leftJoin(routes, eq(trips.routeId, routes.id))
       .leftJoin(buses, eq(trips.busId, buses.id))
       .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .where(
-        and(
-          eq(routes.origin, origin),
-          eq(routes.destination, destination),
-          eq(trips.departureDate, date),
-          eq(trips.status, "scheduled"),
-          gte(trips.availableSeats, 1)
-        )
-      )
-      .then(rows =>
-        rows.map(row => ({
-          ...row.trips,
-          route: row.routes!,
-          bus: {
-            ...row.buses!,
-            busType: row.bus_types!,
-          },
-        }))
-      );
+      .where(and(...whereClauses))
+      .orderBy(trips.departureTime);
+
+    return results.map(row => ({
+      ...row.trip,
+      route: row.route!,
+      bus: {
+        ...row.bus!,
+        busType: row.busType!
+      }
+    }));
   }
 
   async getTripById(id: number): Promise<TripWithDetails | undefined> {
     const [result] = await db
-      .select()
+      .select({
+        trip: trips,
+        route: routes,
+        bus: buses,
+        busType: busTypes,
+      })
       .from(trips)
+      .where(eq(trips.id, id))
       .leftJoin(routes, eq(trips.routeId, routes.id))
       .leftJoin(buses, eq(trips.busId, buses.id))
-      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .where(eq(trips.id, id));
+      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id));
 
     if (!result) return undefined;
 
     return {
-      ...result.trips,
-      route: result.routes!,
+      ...result.trip,
+      route: result.route!,
       bus: {
-        ...result.buses!,
-        busType: result.bus_types!,
-      },
+        ...result.bus!,
+        busType: result.busType!
+      }
     };
   }
 
@@ -216,105 +302,190 @@ export class DatabaseStorage implements IStorage {
     return newTrip;
   }
 
-  async updateTripAvailability(tripId: number, seatsToBook: number): Promise<boolean> {
+  async updateTrip(id: number, tripData: Partial<InsertTrip>): Promise<Trip | undefined> {
     const [updatedTrip] = await db
       .update(trips)
-      .set({
-        availableSeats: sql`${trips.availableSeats} - ${seatsToBook}`,
-      })
+      .set(tripData)
+      .where(eq(trips.id, id))
+      .returning();
+    return updatedTrip;
+  }
+
+  async updateTripAvailability(tripId: number, seatsToBook: number): Promise<boolean> {
+    const [trip] = await db
+      .select()
+      .from(trips)
+      .where(eq(trips.id, tripId));
+
+    if (!trip || trip.availableSeats == null || trip.availableSeats < seatsToBook) {
+      return false;
+    }
+
+    const [updatedTrip] = await db
+      .update(trips)
+      .set({ availableSeats: trip.availableSeats - seatsToBook })
       .where(eq(trips.id, tripId))
       .returning();
+
     return !!updatedTrip;
+  }
+
+  async cancelTrip(id: number): Promise<boolean> {
+    const [cancelledTrip] = await db
+      .update(trips)
+      .set({ status: "cancelled" })
+      .where(eq(trips.id, id))
+      .returning();
+    return !!cancelledTrip;
+  }
+
+  async getWeeklySchedule(): Promise<TripWithDetails[]> {
+    const today = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7);
+
+    const results = await db
+      .select({
+        trip: trips,
+        route: routes,
+        bus: buses,
+        busType: busTypes,
+      })
+      .from(trips)
+      .leftJoin(routes, eq(trips.routeId, routes.id))
+      .leftJoin(buses, eq(trips.busId, buses.id))
+      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .where(
+        and(
+          gte(trips.departureDate, today.toISOString().split('T')[0]),
+          lte(trips.departureDate, nextWeek.toISOString().split('T')[0]),
+          eq(trips.status, "scheduled")
+        )
+      )
+      .orderBy(trips.departureDate, trips.departureTime);
+
+    return results.map(row => ({
+      ...row.trip,
+      route: row.route!,
+      bus: {
+        ...row.bus!,
+        busType: row.busType!
+      }
+    }));
   }
 
   // Booking operations
   async createBooking(booking: InsertBooking): Promise<Booking> {
-    // Generate booking reference
-    const reference = `LB${Date.now().toString().slice(-6)}`;
-    
-    const [newBooking] = await db
-      .insert(bookings)
-      .values({
-        ...booking,
-        bookingReference: reference,
-        qrCode: `booking:${reference}`, // Simple QR code data
-      })
-      .returning();
+    const [newBooking] = await db.insert(bookings).values(booking).returning();
     return newBooking;
+  }
+
+  async updateBooking(id: number, bookingData: Partial<InsertBooking>): Promise<Booking | undefined> {
+    const [updatedBooking] = await db
+      .update(bookings)
+      .set(bookingData)
+      .where(eq(bookings.id, id))
+      .returning();
+    return updatedBooking;
+  }
+
+  async cancelBooking(id: number): Promise<boolean> {
+    const [cancelledBooking] = await db
+      .update(bookings)
+      .set({ paymentStatus: "cancelled" })
+      .where(eq(bookings.id, id))
+      .returning();
+    return !!cancelledBooking;
   }
 
   async getBookingByReference(reference: string): Promise<BookingWithDetails | undefined> {
     const [result] = await db
-      .select()
+      .select({
+        booking: bookings,
+        trip: trips,
+        route: routes,
+        bus: buses,
+        busType: busTypes,
+      })
       .from(bookings)
+      .where(eq(bookings.bookingReference, reference))
       .leftJoin(trips, eq(bookings.tripId, trips.id))
       .leftJoin(routes, eq(trips.routeId, routes.id))
       .leftJoin(buses, eq(trips.busId, buses.id))
-      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .where(eq(bookings.bookingReference, reference));
+      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id));
 
     if (!result) return undefined;
 
     return {
-      ...result.bookings,
+      ...result.booking,
       trip: {
-        ...result.trips!,
-        route: result.routes!,
+        ...result.trip!,
+        route: result.route!,
         bus: {
-          ...result.buses!,
-          busType: result.bus_types!,
-        },
-      },
+          ...result.bus!,
+          busType: result.busType!
+        }
+      }
     };
   }
 
   async getUserBookings(userId: string): Promise<BookingWithDetails[]> {
-    return await db
-      .select()
+    const results = await db
+      .select({
+        booking: bookings,
+        trip: trips,
+        route: routes,
+        bus: buses,
+        busType: busTypes,
+      })
       .from(bookings)
+      .where(eq(bookings.userId, userId))
       .leftJoin(trips, eq(bookings.tripId, trips.id))
       .leftJoin(routes, eq(trips.routeId, routes.id))
       .leftJoin(buses, eq(trips.busId, buses.id))
       .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .where(eq(bookings.userId, userId))
-      .orderBy(desc(bookings.createdAt))
-      .then(rows =>
-        rows.map(row => ({
-          ...row.bookings,
-          trip: {
-            ...row.trips!,
-            route: row.routes!,
-            bus: {
-              ...row.buses!,
-              busType: row.bus_types!,
-            },
-          },
-        }))
-      );
+      .orderBy(desc(bookings.createdAt));
+
+    return results.map(row => ({
+      ...row.booking,
+      trip: {
+        ...row.trip!,
+        route: row.route!,
+        bus: {
+          ...row.bus!,
+          busType: row.busType!
+        }
+      }
+    }));
   }
 
   async getAllBookings(): Promise<BookingWithDetails[]> {
-    return await db
-      .select()
+    const results = await db
+      .select({
+        booking: bookings,
+        trip: trips,
+        route: routes,
+        bus: buses,
+        busType: busTypes,
+      })
       .from(bookings)
       .leftJoin(trips, eq(bookings.tripId, trips.id))
       .leftJoin(routes, eq(trips.routeId, routes.id))
       .leftJoin(buses, eq(trips.busId, buses.id))
       .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .orderBy(desc(bookings.createdAt))
-      .then(rows =>
-        rows.map(row => ({
-          ...row.bookings,
-          trip: {
-            ...row.trips!,
-            route: row.routes!,
-            bus: {
-              ...row.buses!,
-              busType: row.bus_types!,
-            },
-          },
-        }))
-      );
+      .orderBy(desc(bookings.createdAt));
+
+    return results.map(row => ({
+      ...row.booking,
+      trip: {
+        ...row.trip!,
+        route: row.route!,
+        bus: {
+          ...row.bus!,
+          busType: row.busType!
+        }
+      }
+    }));
   }
 
   async updateBookingPaymentStatus(id: number, status: string): Promise<boolean> {
@@ -326,37 +497,6 @@ export class DatabaseStorage implements IStorage {
     return !!updatedBooking;
   }
 
-  // Trip operations
-  async getWeeklySchedule(): Promise<TripWithDetails[]> {
-    // Get today's date and the date 7 days from now
-    const today = new Date();
-    const nextWeek = new Date();
-    nextWeek.setDate(today.getDate() + 7);
-    const todayStr = today.toISOString().slice(0, 10);
-    const nextWeekStr = nextWeek.toISOString().slice(0, 10);
-
-    // Query trips in the next 7 days (inclusive)
-    const tripsThisWeek = await db
-      .select()
-      .from(trips)
-      .leftJoin(routes, eq(trips.routeId, routes.id))
-      .leftJoin(buses, eq(trips.busId, buses.id))
-      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .where(and(
-        gte(trips.departureDate, todayStr),
-        lte(trips.departureDate, nextWeekStr)
-      ));
-
-    return tripsThisWeek.map(row => ({
-      ...row.trips,
-      route: row.routes!,
-      bus: {
-        ...row.buses!,
-        busType: row.bus_types!,
-      },
-    }));
-  }
-
   // Analytics
   async getBookingStats(): Promise<{
     totalBookings: number;
@@ -364,28 +504,48 @@ export class DatabaseStorage implements IStorage {
     activeRoutes: number;
     occupancyRate: number;
   }> {
-    const [bookingCount] = await db
-      .select({ count: sql<number>`count(*)` })
+    const [bookingStats] = await db
+      .select({
+        totalBookings: sql<number>`count(*)`,
+      })
       .from(bookings)
       .where(eq(bookings.paymentStatus, "completed"));
 
-    const [revenueResult] = await db
-      .select({ total: sql<string>`sum(${bookings.totalAmount})` })
+    const [revenueStats] = await db
+      .select({
+        totalRevenue: sql<string>`sum(cast(total_amount as decimal))`,
+      })
       .from(bookings)
       .where(eq(bookings.paymentStatus, "completed"));
 
-    const [routeCount] = await db
-      .select({ count: sql<number>`count(*)` })
+    const [routeStats] = await db
+      .select({
+        activeRoutes: sql<number>`count(*)`,
+      })
       .from(routes)
-      .where(eq(routes.is_active, 1));
+      .where(eq(routes.isActive, 1));
 
-    // Simple occupancy calculation
-    const occupancyRate = 85; // Mock value for now
+    const [occupancyStats] = await db
+      .select({
+        totalSeats: sql<number>`sum(bt.total_seats)`,
+        bookedSeats: sql<number>`count(b.id)`,
+      })
+      .from(trips)
+      .leftJoin(buses, eq(trips.busId, buses.id))
+      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .leftJoin(bookings, eq(bookings.tripId, trips.id))
+      .where(eq(trips.status, "completed"));
+
+    const totalBookings = bookingStats?.totalBookings || 0;
+    const totalRevenue = revenueStats?.totalRevenue || "0";
+    const activeRoutes = routeStats?.activeRoutes || 0;
+    const { totalSeats = 0, bookedSeats = 0 } = occupancyStats || {};
+    const occupancyRate = totalSeats > 0 ? (bookedSeats / totalSeats) * 100 : 0;
 
     return {
-      totalBookings: bookingCount.count || 0,
-      totalRevenue: revenueResult.total || "0",
-      activeRoutes: routeCount.count || 0,
+      totalBookings,
+      totalRevenue: totalRevenue.toString(),
+      activeRoutes,
       occupancyRate,
     };
   }

@@ -5,16 +5,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, User } from "lucide-react";
 import PaymentForm from "./PaymentForm";
-import { SearchParams, SeatSelection as SeatSelectionType } from "@/types";
-import type { TripWithDetails } from "@shared/schema";
+import { SearchParams, SeatSelection as SeatSelectionType, TripWithDetails } from "@/types";
+import { useNavigate } from 'react-router-dom';
+import { formatCurrency } from '@/lib/utils';
+
+interface Seat {
+  id: string;
+  number: string;
+  status: 'available' | 'occupied' | 'selected' | 'premium';
+  price: number;
+}
 
 interface SeatSelectionProps {
   trip: TripWithDetails;
   onBack: () => void;
   searchParams: SearchParams;
+  seats: Seat[];
+  maxSeats: number;
 }
 
-export default function SeatSelection({ trip, onBack, searchParams }: SeatSelectionProps) {
+export default function SeatSelection({ trip, onBack, searchParams, seats, maxSeats }: SeatSelectionProps) {
+  const navigate = useNavigate();
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [passengerDetails, setPassengerDetails] = useState({
     name: "",
@@ -27,32 +38,23 @@ export default function SeatSelection({ trip, onBack, searchParams }: SeatSelect
   const serviceFee = 2000;
   const totalAmount = (selectedSeats.length * seatPrice) + serviceFee;
 
-  // Generate seat layout based on bus type
-  const generateSeatLayout = () => {
-    const totalSeats = trip.bus.busType.totalSeats || 40;
-    const seatsPerRow = 4;
-    const rows = Math.ceil(totalSeats / seatsPerRow);
-    const layout = [];
-
-    for (let row = 1; row <= rows; row++) {
-      const rowSeats = [];
-      for (let seat = 1; seat <= seatsPerRow; seat++) {
-        const seatNumber = `${row}${String.fromCharCode(64 + seat)}`; // 1A, 1B, etc.
-        const isOccupied = Math.random() < 0.3; // 30% chance of being occupied
-        rowSeats.push({ seatNumber, isOccupied });
+  const handleSeatClick = (seat: Seat) => {
+    if (seat.status === 'occupied') return;
+    
+    setSelectedSeats(prev => {
+      if (prev.includes(seat.id)) {
+        return prev.filter(id => id !== seat.id);
       }
-      layout.push(rowSeats);
-    }
-    return layout;
+      if (prev.length >= maxSeats) {
+        return prev;
+      }
+      return [...prev, seat.id];
+    });
   };
 
-  const seatLayout = generateSeatLayout();
-
-  const handleSeatClick = (seatNumber: string) => {
-    if (selectedSeats.includes(seatNumber)) {
-      setSelectedSeats(prev => prev.filter(seat => seat !== seatNumber));
-    } else if (selectedSeats.length < searchParams.passengers) {
-      setSelectedSeats(prev => [...prev, seatNumber]);
+  const handleProceed = () => {
+    if (selectedSeats.length > 0) {
+      navigate('/payment', { state: { selectedSeats } });
     }
   };
 
@@ -66,6 +68,12 @@ export default function SeatSelection({ trip, onBack, searchParams }: SeatSelect
     tripId: trip.id,
     selectedSeats,
     passengerDetails,
+  };
+
+  const getSeatClassName = (seat: Seat) => {
+    const baseClass = 'seat';
+    if (selectedSeats.includes(seat.id)) return `${baseClass} seat-selected`;
+    return `${baseClass} seat-${seat.status}`;
   };
 
   if (showPayment) {
@@ -94,88 +102,66 @@ export default function SeatSelection({ trip, onBack, searchParams }: SeatSelect
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Seat Map */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Bus Layout</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-muted rounded-xl p-6">
-                {/* Driver Section */}
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center justify-center w-16 h-8 bg-gray-800 rounded-t-3xl text-white">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">Driver</p>
-                </div>
-
-                {/* Seat Grid */}
-                <div className="space-y-3">
-                  {seatLayout.map((row, rowIndex) => (
-                    <div key={rowIndex} className="flex justify-center items-center space-x-4">
-                      <div className="flex space-x-2">
-                        {row.slice(0, 2).map((seat) => (
-                          <button
-                            key={seat.seatNumber}
-                            disabled={seat.isOccupied}
-                            onClick={() => handleSeatClick(seat.seatNumber)}
-                            className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
-                              seat.isOccupied
-                                ? 'seat-occupied'
-                                : selectedSeats.includes(seat.seatNumber)
-                                ? 'seat-selected'
-                                : 'seat-available'
-                            }`}
-                          >
-                            {seat.seatNumber}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="w-8"></div>
-                      <div className="flex space-x-2">
-                        {row.slice(2, 4).map((seat) => (
-                          <button
-                            key={seat.seatNumber}
-                            disabled={seat.isOccupied}
-                            onClick={() => handleSeatClick(seat.seatNumber)}
-                            className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
-                              seat.isOccupied
-                                ? 'seat-occupied'
-                                : selectedSeats.includes(seat.seatNumber)
-                                ? 'seat-selected'
-                                : 'seat-available'
-                            }`}
-                          >
-                            {seat.seatNumber}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Legend */}
-                <div className="mt-6 flex flex-wrap justify-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 seat-available"></div>
-                    <span>Available</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 seat-selected"></div>
-                    <span>Selected</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 seat-occupied"></div>
-                    <span>Occupied</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      <div className="card">
+        <div className="mb-4">
+          <h3 className="text-lg font-bold mb-2">Select Your Seats</h3>
+          <p className="text-sm">
+            You can select up to {maxSeats} seats. Selected: {selectedSeats.length}
+          </p>
         </div>
 
+        <div className="flex gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="seat seat-available">A</div>
+            <span className="text-sm">Available</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="seat seat-selected">S</div>
+            <span className="text-sm">Selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="seat seat-occupied">O</div>
+            <span className="text-sm">Occupied</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="seat seat-premium">P</div>
+            <span className="text-sm">Premium</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-4 mb-4">
+          {seats.map((seat) => (
+            <button
+              key={seat.id}
+              className={getSeatClassName(seat)}
+              onClick={() => handleSeatClick(seat)}
+              disabled={seat.status === 'occupied'}
+            >
+              {seat.number}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-sm">Total Amount:</p>
+            <p className="font-bold">
+              UGX {formatCurrency(selectedSeats
+                .map(id => seats.find(seat => seat.id === id)?.price || 0)
+                .reduce((a, b) => a + b, 0))}
+            </p>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleProceed}
+            disabled={selectedSeats.length === 0}
+          >
+            Proceed to Payment
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Booking Summary */}
         <div className="lg:col-span-1">
           <Card className="sticky top-24">
@@ -242,15 +228,15 @@ export default function SeatSelection({ trip, onBack, searchParams }: SeatSelect
               <div className="space-y-2 pt-4 border-t border-border">
                 <div className="flex justify-between text-sm">
                   <span>Tickets ({selectedSeats.length})</span>
-                  <span>UGX {(selectedSeats.length * seatPrice).toLocaleString()}</span>
+                  <span>UGX {formatCurrency(selectedSeats.length * seatPrice)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Service Fee</span>
-                  <span>UGX {serviceFee.toLocaleString()}</span>
+                  <span>UGX {formatCurrency(serviceFee)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
                   <span>Total</span>
-                  <span className="text-primary">UGX {totalAmount.toLocaleString()}</span>
+                  <span className="text-primary">UGX {formatCurrency(totalAmount)}</span>
                 </div>
               </div>
 

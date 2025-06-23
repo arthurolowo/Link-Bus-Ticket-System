@@ -1,0 +1,8 @@
+{
+  "schema": "./server/schema.ts",
+  "out": "./drizzle",
+  "dialect": "postgresql",
+  "dbCredentials": {
+    "url": "postgres://postgres:postgres@localhost:5432/bus_ticket_system"
+  }
+}

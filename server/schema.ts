@@ -5,13 +5,12 @@ import { z } from 'zod';
 // USERS TABLE
 export const users = pgTable('users', {
   id: varchar('id', { length: 64 }).primaryKey(),
-  name: varchar('name', { length: 128 }),
-  email: varchar('email', { length: 128 }).notNull(),
-  password: varchar('password', { length: 128 }),
+  name: varchar('name', { length: 128 }).notNull(),
+  email: varchar('email', { length: 128 }).notNull().unique(),
+  password: varchar('password', { length: 128 }).notNull(),
   phone: varchar('phone', { length: 32 }),
-  isVerified: pgBoolean('is_verified').default(false),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
 // BOOKINGS TABLE
@@ -20,17 +19,17 @@ export const bookings = pgTable('bookings', {
   userId: varchar('user_id', { length: 64 }).references(() => users.id),
   tripId: integer('trip_id').references(() => trips.id),
   seatNumber: integer('seat_number'),
-  bookingReference: varchar('booking_reference', { length: 64 }).notNull(),
+  bookingReference: varchar('booking_reference', { length: 32 }).notNull(),
   paymentStatus: varchar('payment_status', { length: 32 }).default('pending'),
-  totalAmount: varchar('total_amount', { length: 16 }),
+  totalAmount: varchar('total_amount', { length: 10 }),
   qrCode: varchar('qr_code', { length: 256 }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
 });
 
 export type User = InferModel<typeof users>;
-export type UpsertUser = Omit<User, 'createdAt' | 'updatedAt'>;
+export type UpsertUser = InferModel<typeof users, 'insert'>;
 export type Route = InferModel<typeof routes>;
-export type InsertRoute = Omit<Route, 'id'>;
+export type InsertRoute = InferModel<typeof routes, 'insert'>;
 
 export const insertRouteSchema = z.object({
   origin: z.string(),
@@ -40,13 +39,13 @@ export const insertRouteSchema = z.object({
   isActive: z.number().nullable().optional(),
 });
 export type BusType = InferModel<typeof busTypes>;
-export type InsertBusType = Omit<BusType, 'id'>;
+export type InsertBusType = InferModel<typeof busTypes, 'insert'>;
 export type Bus = InferModel<typeof buses>;
-export type InsertBus = Omit<Bus, 'id'>;
+export type InsertBus = InferModel<typeof buses, 'insert'>;
 export type Trip = InferModel<typeof trips>;
-export type InsertTrip = Omit<Trip, 'id'>;
+export type InsertTrip = InferModel<typeof trips, 'insert'>;
 export type Booking = InferModel<typeof bookings>;
-export type InsertBooking = Omit<Booking, 'id' | 'createdAt'>;
+export type InsertBooking = InferModel<typeof bookings, 'insert'>;
 
 // TripWithDetails and BookingWithDetails types
 export type TripWithDetails = Trip & {
@@ -61,9 +60,17 @@ export const busTypes = pgTable('bus_types', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 64 }).notNull(),
   description: text('description'),
-  amenities: jsonb('amenities'),
-  seatLayout: jsonb('seat_layout'),
-  totalSeats: integer('total_seats'),
+  amenities: jsonb('amenities').$type<string[]>(),
+  seatLayout: jsonb('seat_layout').$type<{
+    rows: number;
+    columns: number;
+    seats: {
+      number: string;
+      type: 'regular' | 'premium' | 'disabled';
+      position: { row: number; column: number };
+    }[];
+  }>(),
+  totalSeats: integer('total_seats').notNull(),
 });
 
 export const routes = pgTable('routes', {
@@ -78,7 +85,7 @@ export const routes = pgTable('routes', {
 export const buses = pgTable('buses', {
   id: serial('id').primaryKey(),
   busNumber: varchar('bus_number', { length: 32 }).notNull(),
-  busTypeId: integer('bus_type_id').references(() => busTypes.id),
+  busTypeId: integer('bus_type_id').references(() => busTypes.id).notNull(),
   isActive: integer('is_active').default(1),
 });
 
@@ -86,10 +93,70 @@ export const trips = pgTable('trips', {
   id: serial('id').primaryKey(),
   routeId: integer('route_id').references(() => routes.id),
   busId: integer('bus_id').references(() => buses.id),
-  departureDate: date('departure_date').notNull(),
-  departureTime: time('departure_time').notNull(),
-  arrivalTime: time('arrival_time').notNull(),
-  price: varchar('price', { length: 16 }).notNull(),
+  departureDate: varchar('departure_date', { length: 10 }).notNull(),
+  departureTime: varchar('departure_time', { length: 5 }).notNull(),
+  arrivalTime: varchar('arrival_time', { length: 5 }).notNull(),
+  price: varchar('price', { length: 10 }).notNull(),
   availableSeats: integer('available_seats'),
-  status: varchar('status', { length: 32 }),
+  status: varchar('status', { length: 32 }).default('scheduled'),
+});
+
+// Validation schemas
+export const userSchema = z.object({
+  name: z.string().min(2).max(128),
+  email: z.string().email().max(128),
+  password: z.string().min(6).max(128),
+  phone: z.string().min(10).max(32).optional(),
+});
+
+export const routeSchema = z.object({
+  origin: z.string().min(2).max(64),
+  destination: z.string().min(2).max(64),
+  distance: z.number().int().positive().optional(),
+  estimatedDuration: z.number().int().positive().optional(),
+  isActive: z.number().int().min(0).max(1).optional(),
+});
+
+export const busTypeSchema = z.object({
+  name: z.string().min(2).max(64),
+  description: z.string().optional(),
+  amenities: z.array(z.string()).optional(),
+  seatLayout: z.object({
+    rows: z.number().int().positive(),
+    columns: z.number().int().positive(),
+    seats: z.array(z.object({
+      number: z.string(),
+      type: z.enum(['regular', 'premium', 'disabled']),
+      position: z.object({
+        row: z.number().int(),
+        column: z.number().int(),
+      }),
+    })),
+  }).optional(),
+  totalSeats: z.number().int().positive(),
+});
+
+export const busSchema = z.object({
+  busNumber: z.string().min(2).max(32),
+  busTypeId: z.number().int().positive(),
+  isActive: z.number().int().min(0).max(1).optional(),
+});
+
+export const tripSchema = z.object({
+  routeId: z.number().int().positive(),
+  busId: z.number().int().positive(),
+  departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  departureTime: z.string().regex(/^\d{2}:\d{2}$/),
+  arrivalTime: z.string().regex(/^\d{2}:\d{2}$/),
+  price: z.string().regex(/^\d+(\.\d{2})?$/),
+  availableSeats: z.number().int().min(0).optional(),
+  status: z.enum(['scheduled', 'cancelled', 'completed']).optional(),
+});
+
+export const bookingSchema = z.object({
+  userId: z.string().min(1).max(64),
+  tripId: z.number().int().positive(),
+  seatNumber: z.number().int().positive(),
+  totalAmount: z.string().regex(/^\d+(\.\d{2})?$/),
+  paymentStatus: z.enum(['pending', 'completed', 'failed', 'cancelled']).optional(),
 });

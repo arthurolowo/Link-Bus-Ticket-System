@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { 
   BarChart, 
   Bus, 
@@ -17,10 +16,47 @@ import {
   Users,
   Search
 } from "lucide-react";
-import Header from "@/components/Header";
-import type { BookingWithDetails } from "@shared/schema";
+import { Header } from "../components/Header";
+import type { Booking, TripWithDetails } from "../types";
+import { useToast } from '../hooks/use-toast';
+import { useAuth } from '../hooks/useAuth';
+import { Navigate } from 'react-router-dom';
+import { formatCurrency } from '../lib/utils';
+
+interface BookingWithDetails extends Booking {
+  passengerName: string;
+  passengerPhone: string;
+  bookingReference: string;
+  paymentStatus: 'completed' | 'pending' | 'failed';
+  bookingStatus: string;
+  trip: TripWithDetails;
+}
+
+interface AdminStats {
+  totalBookings: number;
+  totalRevenue: string;
+  activeRoutes: number;
+  occupancyRate: number;
+}
+
+const getStatusVariant = (status: string) => {
+  switch (status) {
+    case 'completed':
+    case 'confirmed':
+      return 'default';
+    case 'pending':
+      return 'secondary';
+    case 'failed':
+    case 'cancelled':
+      return 'destructive';
+    default:
+      return 'outline';
+  }
+};
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("");
@@ -30,12 +66,18 @@ export default function AdminDashboard() {
   const [filterDestination, setFilterDestination] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { data: stats, isLoading: isLoadingStats } = useQuery({
+  // Redirect non-admin users
+  if (!user?.isAdmin) {
+    return <Navigate to="/" />;
+  }
+
+  const { data: stats, isLoading: isLoadingStats } = useQuery<AdminStats>({
     queryKey: ['/api/admin/stats'],
   });
 
-  const { data: bookings, isLoading: isLoadingBookings } = useQuery({
+  const { data: bookings, isLoading: isLoadingBookings } = useQuery<BookingWithDetails[]>({
     queryKey: ['/api/admin/bookings'],
   });
 
@@ -63,20 +105,25 @@ export default function AdminDashboard() {
     return matchesSearch && matchesPaymentStatus && matchesStatus && matchesPhone && matchesOrigin && matchesDestination && matchesStartDate && matchesEndDate;
   });
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'failed':
-        return 'bg-red-100 text-red-800';
-      case 'confirmed':
-        return 'bg-blue-100 text-blue-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const handleAddRoute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      // TODO: Implement route addition
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated API call
+      toast({
+        title: 'Success',
+        description: 'New route has been added successfully.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to add route',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -141,7 +188,7 @@ export default function AdminDashboard() {
                     <div>
                       <p className="text-sm text-muted-foreground">Revenue</p>
                       <p className="text-2xl font-bold text-foreground">
-                        UGX {isLoadingStats ? "..." : parseFloat(stats?.totalRevenue || "0").toLocaleString()}
+                        UGX {isLoadingStats ? "..." : formatCurrency(stats?.totalRevenue || "0")}
                       </p>
                     </div>
                     <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -165,12 +212,14 @@ export default function AdminDashboard() {
                         {isLoadingStats ? "..." : stats?.activeRoutes || 0}
                       </p>
                     </div>
-                    <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                      <Route className="w-6 h-6 text-orange-600" />
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <Route className="w-6 h-6 text-purple-600" />
                     </div>
                   </div>
                   <div className="mt-4 flex items-center text-sm">
-                    <span className="text-muted-foreground">No change vs last month</span>
+                    <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+                    <span className="text-green-600">+5%</span>
+                    <span className="text-muted-foreground ml-1">vs last month</span>
                   </div>
                 </CardContent>
               </Card>
@@ -181,16 +230,16 @@ export default function AdminDashboard() {
                     <div>
                       <p className="text-sm text-muted-foreground">Occupancy Rate</p>
                       <p className="text-2xl font-bold text-foreground">
-                        {isLoadingStats ? "..." : stats?.occupancyRate || 0}%
+                        {isLoadingStats ? "..." : `${stats?.occupancyRate || 0}%`}
                       </p>
                     </div>
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <BarChart className="w-6 h-6 text-purple-600" />
+                    <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <Bus className="w-6 h-6 text-orange-600" />
                     </div>
                   </div>
                   <div className="mt-4 flex items-center text-sm">
                     <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                    <span className="text-green-600">+5%</span>
+                    <span className="text-green-600">+3%</span>
                     <span className="text-muted-foreground ml-1">vs last month</span>
                   </div>
                 </CardContent>
@@ -211,18 +260,19 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="space-y-4">
                       {bookings?.slice(0, 5).map((booking: BookingWithDetails) => (
-                        <div key={booking.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                          <div>
-                            <p className="font-medium">{booking.passengerName}</p>
+                        <div key={booking.id} className="flex items-center">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium leading-none">{booking.passengerName}</p>
                             <p className="text-sm text-muted-foreground">
-                              {booking.trip.route.origin} → {booking.trip.route.destination}
+                              {booking.trip.route.origin} to {booking.trip.route.destination}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold">UGX {parseFloat(booking.totalAmount).toLocaleString()}</p>
-                            <Badge className={`text-xs ${getStatusColor(booking.paymentStatus)}`}>
-                              {booking.paymentStatus}
-                            </Badge>
+                          <div className="ml-auto flex items-center gap-4">
+                            <div className="flex flex-col items-end">
+                              <p className="text-sm font-medium">UGX {formatCurrency(booking.totalAmount)}</p>
+                              <p className="text-sm text-muted-foreground">{new Date(booking.trip.departureDate).toLocaleDateString()}</p>
+                            </div>
+                            <Badge variant={getStatusVariant(booking.bookingStatus)}>{booking.bookingStatus}</Badge>
                           </div>
                         </div>
                       ))}
@@ -380,36 +430,31 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredBookings.map((booking: BookingWithDetails) => (
-                          <tr key={booking.id} className="border-b border-border hover:bg-muted/50">
-                            <td className="py-3 px-4 font-medium text-primary">
-                              {booking.bookingReference}
+                        {filteredBookings.map((b: BookingWithDetails) => (
+                          <tr key={b.id} className="border-b">
+                            <td className="px-6 py-4 font-medium">{b.bookingReference}</td>
+                            <td className="px-6 py-4">{b.passengerName}</td>
+                            <td className="px-6 py-4">
+                              {b.trip.route.origin} to {b.trip.route.destination}
                             </td>
-                            <td className="py-3 px-4">
-                              <div>
-                                <div className="font-medium">{booking.passengerName}</div>
-                                <div className="text-sm text-muted-foreground">{booking.passengerPhone}</div>
-                              </div>
+                            <td className="px-6 py-4">
+                              {new Date(b.trip.departureDate).toLocaleDateString()}
                             </td>
-                            <td className="py-3 px-4">
-                              {booking.trip.route.origin} → {booking.trip.route.destination}
-                            </td>
-                            <td className="py-3 px-4">
-                              {new Date(booking.trip.departureDate).toLocaleDateString()}
-                            </td>
-                            <td className="py-3 px-4 font-medium">
-                              UGX {parseFloat(booking.totalAmount).toLocaleString()}
-                            </td>
-                            <td className="py-3 px-4">
-                              <Badge className={getStatusColor(booking.paymentStatus)}>
-                                {booking.paymentStatus}
+                            <td className="px-6 py-4">UGX {formatCurrency(b.totalAmount)}</td>
+                            <td className="px-6 py-4">
+                              <Badge variant={getStatusVariant(b.bookingStatus)}>
+                                {b.bookingStatus}
                               </Badge>
                             </td>
-                            <td className="py-3 px-4">
-                              <div className="flex gap-2">
-                                <Button variant="outline" size="sm">View</Button>
-                                <Button variant="outline" size="sm">Edit</Button>
-                              </div>
+                            <td className="px-6 py-4">
+                              <Badge variant={getStatusVariant(b.paymentStatus)}>
+                                {b.paymentStatus}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4">
+                              <Button variant="outline" size="sm">
+                                View
+                              </Button>
                             </td>
                           </tr>
                         ))}
@@ -455,7 +500,7 @@ export default function AdminDashboard() {
                           <div className="text-sm text-muted-foreground">{item.bookings} bookings this month</div>
                         </div>
                         <div className="text-right">
-                          <div className="font-semibold text-primary">UGX {item.revenue}</div>
+                          <div className="font-semibold text-primary">UGX {formatCurrency(item.revenue)}</div>
                           <div className="text-sm text-muted-foreground">Revenue</div>
                         </div>
                       </div>

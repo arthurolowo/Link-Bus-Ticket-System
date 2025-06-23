@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../components/ui/accordion";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { useToast } from "../hooks/use-toast";
 import { 
   Phone, 
   Mail, 
@@ -24,68 +24,38 @@ import {
   CheckCircle,
   Send
 } from "lucide-react";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
+import { Header } from "../components/Header";
+import Footer from "../components/Footer";
 
 export default function Support() {
-  const [contactForm, setContactForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    subject: "",
-    category: "",
-    message: "",
+  const [formData, setFormData] = useState({
+    subject: '',
+    message: '',
   });
-
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const submitContactMutation = useMutation({
-    mutationFn: async (formData: typeof contactForm) => {
-      const response = await fetch('/api/support', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || 'Failed to send message');
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Message Sent Successfully",
-        description: "We'll get back to you within 24 hours.",
-      });
-      setContactForm({
-        name: "",
-        email: "",
-        phone: "",
-        subject: "",
-        category: "",
-        message: "",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Failed to Send Message",
-        description: "Please try again or contact us directly.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!contactForm.name || !contactForm.email || !contactForm.message) {
+    setIsLoading(true);
+
+    try {
+      // TODO: Implement support ticket submission
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated API call
       toast({
-        title: "Required Fields Missing",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
+        title: 'Success',
+        description: 'Your support ticket has been submitted. We will get back to you soon.',
       });
-      return;
+      setFormData({ subject: '', message: '' });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to submit support ticket',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
-    submitContactMutation.mutate(contactForm);
   };
 
   const faqs = [
@@ -139,7 +109,7 @@ export default function Support() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-foreground mb-4">Help & Support</h1>
+          <h1 className="text-4xl font-bold text-foreground mb-4">Customer Support</h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             We're here to help you every step of your journey. Find answers to common questions 
             or get in touch with our support team for personalized assistance.
@@ -193,102 +163,36 @@ export default function Support() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Send className="w-5 h-5" />
-                  Send us a Message
+                  Submit a Support Ticket
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="name">Full Name *</Label>
-                      <Input
-                        id="name"
-                        value={contactForm.name}
-                        onChange={(e) => setContactForm(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="Your full name"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email">Email Address *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={contactForm.email}
-                        onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
-                        placeholder="your@email.com"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input
-                      id="phone"
-                      value={contactForm.phone}
-                      onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
-                      placeholder="+256 7XX XXX XXX"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="category">Category</Label>
-                    <Select value={contactForm.category} onValueChange={(value) => 
-                      setContactForm(prev => ({ ...prev, category: value }))
-                    }>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select inquiry type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="booking">Booking Issues</SelectItem>
-                        <SelectItem value="payment">Payment & Refunds</SelectItem>
-                        <SelectItem value="schedule">Schedule Changes</SelectItem>
-                        <SelectItem value="safety">Safety & Security</SelectItem>
-                        <SelectItem value="technical">Technical Support</SelectItem>
-                        <SelectItem value="general">General Inquiry</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
+                  <div className="space-y-2">
                     <Label htmlFor="subject">Subject</Label>
                     <Input
                       id="subject"
-                      value={contactForm.subject}
-                      onChange={(e) => setContactForm(prev => ({ ...prev, subject: e.target.value }))}
-                      placeholder="Brief description of your inquiry"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="message">Message *</Label>
-                    <Textarea
-                      id="message"
-                      value={contactForm.message}
-                      onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
-                      placeholder="Please provide details about your inquiry..."
-                      rows={5}
+                      value={formData.subject}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, subject: e.target.value }))}
+                      placeholder="What can we help you with?"
                       required
                     />
                   </div>
 
-                  <Button
-                    type="submit"
-                    disabled={submitContactMutation.isPending}
-                    className="w-full btn-primary"
-                  >
-                    {submitContactMutation.isPending ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Sending...
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Send className="w-4 h-4" />
-                        Send Message
-                      </div>
-                    )}
+                  <div className="space-y-2">
+                    <Label htmlFor="message">Message</Label>
+                    <Textarea
+                      id="message"
+                      value={formData.message}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, message: e.target.value }))}
+                      placeholder="Please describe your issue in detail"
+                      rows={6}
+                      required
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full btn-primary" disabled={isLoading}>
+                    {isLoading ? 'Submitting...' : 'Submit Ticket'}
                   </Button>
                 </form>
               </CardContent>

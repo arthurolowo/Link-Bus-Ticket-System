@@ -11,7 +11,8 @@ import { ArrowLeft, CreditCard, Smartphone, Building2, Lock, Shield } from "luci
 import DigitalTicket from "./DigitalTicket";
 import { SeatSelection, PaymentData } from "@/types";
 import { apiRequest } from "@/lib/queryClient";
-import type { TripWithDetails, Booking } from "@shared/schema";
+import type { TripWithDetails, Booking } from "@/types";
+import { formatCurrency } from '@/lib/utils';
 
 interface PaymentFormProps {
   trip: TripWithDetails;
@@ -58,10 +59,10 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
       // Process payment
       processPayment(newBooking.id);
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       toast({
         title: "Booking Failed",
-        description: error.message || "Failed to create booking",
+        description: error instanceof Error ? error.message : "Failed to create booking",
         variant: "destructive",
       });
     },
@@ -91,10 +92,10 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
         });
       }
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       toast({
         title: "Payment Error",
-        description: error.message || "Payment processing error",
+        description: error instanceof Error ? error.message : "Payment processing error",
         variant: "destructive",
       });
     },
@@ -356,7 +357,7 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
                   ) : (
                     <div className="flex items-center gap-2">
                       <Lock className="w-4 h-4" />
-                      Pay Securely - UGX {totalAmount.toLocaleString()}
+                      Pay Securely - UGX {formatCurrency(totalAmount)}
                     </div>
                   )}
                 </Button>
@@ -402,16 +403,16 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
               {/* Price Breakdown */}
               <div className="space-y-2 pt-4 border-t border-border">
                 <div className="flex justify-between text-sm">
-                  <span>Ticket Price × {seatSelection.selectedSeats.length}</span>
-                  <span>UGX {(seatSelection.selectedSeats.length * parseFloat(trip.price)).toLocaleString()}</span>
+                  <span>Ticket Price ({seatSelection.selectedSeats.length} seats)</span>
+                  <span>UGX {formatCurrency(seatSelection.selectedSeats.length * parseFloat(trip.price))}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Service Fee</span>
-                  <span>UGX 2,000</span>
+                  <span>UGX {formatCurrency(2000)}</span>
                 </div>
-                <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
+                <div className="flex justify-between font-semibold">
                   <span>Total Amount</span>
-                  <span className="text-primary">UGX {totalAmount.toLocaleString()}</span>
+                  <span className="text-primary">UGX {formatCurrency(totalAmount)}</span>
                 </div>
               </div>
 

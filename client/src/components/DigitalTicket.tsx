@@ -16,7 +16,8 @@ import {
   Mail,
   AlertTriangle
 } from "lucide-react";
-import type { Booking, TripWithDetails } from "@shared/schema";
+import type { Booking, TripWithDetails } from "@/types";
+import { formatCurrency } from '@/lib/utils';
 
 interface DigitalTicketProps {
   booking: Booking;
@@ -190,7 +191,7 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
               </div>
               <div className="text-center">
                 <div className="text-sm text-muted-foreground mb-1">Total Paid</div>
-                <div className="font-semibold">UGX {parseFloat(booking.totalAmount).toLocaleString()}</div>
+                <div className="font-semibold">UGX {formatCurrency(booking.totalAmount)}</div>
                 <div className="text-xs text-muted-foreground">Incl. fees</div>
               </div>
             </div>

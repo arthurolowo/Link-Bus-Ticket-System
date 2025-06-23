@@ -3,10 +3,15 @@ export interface SearchParams {
   destination: string;
   date: string;
   passengers: number;
+  minTime?: string;
+  maxTime?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  busType?: string;
 }
 
 export interface SeatSelection {
-  tripId: number;
+  tripId: string;
   selectedSeats: string[];
   passengerDetails: {
     name: string;
@@ -45,16 +50,74 @@ export const UGANDAN_CITIES = [
   'Kampala',
   'Entebbe',
   'Jinja',
-  'Mbale',
   'Mbarara',
   'Gulu',
-  'Fort Portal',
-  'Kasese',
-  'Arua',
   'Lira',
-  'Soroti',
+  'Mbale',
+  'Fort Portal',
   'Masaka',
-  'Hoima',
+  'Arua',
   'Kabale',
+  'Kasese',
   'Tororo',
-];
+  'Soroti',
+  'Hoima',
+] as const;
+
+export type UgandanCity = typeof UGANDAN_CITIES[number];
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  isVerified: boolean;
+  isAdmin: boolean;
+}
+
+export interface Trip {
+  id: string;
+  origin: UgandanCity;
+  destination: UgandanCity;
+  departureTime: string;
+  arrivalTime: string;
+  price: number;
+  availableSeats: number;
+  busType: string;
+}
+
+export interface Booking {
+  id: string;
+  userId: string;
+  tripId: string;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  seatNumbers: number[];
+  totalAmount: number;
+  createdAt: string;
+  updatedAt: string;
+  bookingReference: string;
+  passengerName: string;
+  passengerPhone: string;
+  passengerEmail?: string;
+  paymentStatus: 'completed' | 'pending' | 'failed';
+}
+
+export interface TripWithDetails {
+  id: string;
+  route: {
+    origin: string;
+    destination: string;
+    estimatedDuration?: number;
+  };
+  departureDate: string;
+  departureTime: string;
+  arrivalTime: string;
+  price: string;
+  bus: {
+    busType: {
+      name: string;
+      totalSeats: number;
+    };
+    busNumber: string;
+  };
+}
