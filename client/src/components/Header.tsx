@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { User } from 'lucide-react';
+import { Bus, User } from 'lucide-react';
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -21,20 +21,46 @@ export function Header() {
   };
 
   return (
-    <header className="card">
-      <div className="container flex items-center justify-between">
+    <header className="border-b bg-background">
+      <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.svg" alt="Link Bus" className="w-10" />
-          <span className="text-lg font-bold">Link Bus</span>
+          <Bus className="h-6 w-6" />
+          <span className="text-xl font-bold">Link Bus</span>
         </Link>
         
-        <nav className="flex gap-4">
-          <Link to="/" className="btn btn-secondary">Home</Link>
-          <Link to="/routes" className="btn btn-secondary">Routes</Link>
-          <Link to="/support" className="btn btn-secondary">Support</Link>
-          <Link to="/login" className="btn btn-primary">Login</Link>
+        <nav className="flex items-center gap-4">
+          <Link to="/" className="text-sm font-medium hover:text-primary">
+            Home
+          </Link>
+          <Link to="/routes" className="text-sm font-medium hover:text-primary">
+            Routes
+          </Link>
+          <Link to="/support" className="text-sm font-medium hover:text-primary">
+            Support
+          </Link>
+          {!user ? (
+            <Link to="/login">
+              <Button variant="default" size="sm">
+                Login
+              </Button>
+            </Link>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <User className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleLogout}>
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </nav>
       </div>
     </header>
   );
 }
+

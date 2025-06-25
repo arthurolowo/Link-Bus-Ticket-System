@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { useToast } from "../hooks/use-toast";
 import { ArrowLeft, CreditCard, Smartphone, Building2, Lock, Shield } from "lucide-react";
 import DigitalTicket from "./DigitalTicket";
-import { SeatSelection, PaymentData } from "@/types";
-import { apiRequest } from "@/lib/queryClient";
-import type { TripWithDetails, Booking } from "@/types";
+import { SeatSelection, PaymentData } from "../types";
+import { apiRequest } from "../lib/queryClient";
+import type { TripWithDetails, Booking } from "../types";
 import { formatCurrency } from '@/lib/utils';
 
 interface PaymentFormProps {
@@ -430,3 +430,4 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
     </div>
   );
 }
+

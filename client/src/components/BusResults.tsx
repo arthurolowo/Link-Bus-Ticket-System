@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Slider } from "./ui/slider";
+import { Checkbox } from "./ui/checkbox";
 import { ArrowLeft, Clock, MapPin, Wifi, Snowflake, Zap, Volume2, ArrowRight, Filter } from "lucide-react";
 import {
   Sheet,
@@ -13,9 +13,9 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet";
+} from "./ui/sheet";
 import SeatSelection from "./SeatSelection";
-import { SearchParams, TripWithDetails } from "@/types";
+import { SearchParams, TripWithDetails } from "../types";
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/lib/utils';
 
@@ -96,3 +96,4 @@ export function BusResults({ buses, loading = false }: BusResultsProps) {
     </div>
   );
 }
+

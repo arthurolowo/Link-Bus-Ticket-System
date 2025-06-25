@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { ArrowLeft, User } from "lucide-react";
 import PaymentForm from "./PaymentForm";
-import { SearchParams, SeatSelection as SeatSelectionType, TripWithDetails } from "@/types";
+import { SearchParams, SeatSelection as SeatSelectionType, TripWithDetails } from "../types";
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/lib/utils';
 
@@ -254,3 +254,4 @@ export default function SeatSelection({ trip, onBack, searchParams, seats, maxSe
     </div>
   );
 }
+

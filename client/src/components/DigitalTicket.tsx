@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { Badge } from "./ui/badge";
 import { 
   CheckCircle, 
   Download, 
@@ -16,7 +16,7 @@ import {
   Mail,
   AlertTriangle
 } from "lucide-react";
-import type { Booking, TripWithDetails } from "@/types";
+import type { Booking, TripWithDetails } from "../types";
 import { formatCurrency } from '@/lib/utils';
 
 interface DigitalTicketProps {
@@ -287,3 +287,4 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
     </div>
   );
 }
+
