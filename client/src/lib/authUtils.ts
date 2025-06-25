@@ -13,6 +13,7 @@ export interface AuthResponse {
 }
 
 const TOKEN_KEY = 'auth_token';
+const API_BASE_URL = 'http://localhost:5000';
 
 export function setToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token);
@@ -35,7 +36,7 @@ export function isUnauthorizedError(error: Error): boolean {
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
-  const response = await fetch('/api/auth/login', {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -54,7 +55,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
 }
 
 export async function register(name: string, email: string, password: string, phone?: string): Promise<AuthResponse> {
-  const response = await fetch('/api/auth/register', {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -81,7 +82,7 @@ export async function getCurrentUser(): Promise<User | null> {
     const token = getToken();
     if (!token) return null;
 
-    const response = await fetch('/api/auth/me', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
