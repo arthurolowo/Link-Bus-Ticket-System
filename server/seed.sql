@@ -22,6 +22,7 @@ CREATE TABLE users (
     email VARCHAR(128) NOT NULL, -- User's email address
     password VARCHAR(128), -- Hashed password
     phone VARCHAR(32), -- User's phone number
+    is_admin BOOLEAN DEFAULT FALSE, -- Admin status
     is_verified BOOLEAN DEFAULT FALSE, -- Email verification status
     created_at TIMESTAMPTZ DEFAULT NOW(), -- Account creation timestamp
     updated_at TIMESTAMPTZ DEFAULT NOW() -- Last update timestamp
@@ -86,9 +87,9 @@ CREATE TABLE bookings (
 -- =========================
 
 -- Users
-INSERT INTO users (id, name, email, password, phone, is_verified) VALUES
-  ('user1', 'Alice Smith', 'alice@example.com', 'hashedpassword1', '1234567890', TRUE),
-  ('user2', 'Bob Johnson', 'bob@example.com', 'hashedpassword2', '0987654321', FALSE);
+INSERT INTO users (id, name, email, password, phone, is_admin, is_verified) VALUES
+  ('user1', 'Alice Smith', 'alice@example.com', 'hashedpassword1', '1234567890', TRUE, TRUE),
+  ('user2', 'Bob Johnson', 'bob@example.com', 'hashedpassword2', '0987654321', FALSE, TRUE);
 
 -- Bus Types
 INSERT INTO bus_types (name, description, amenities, seat_layout, total_seats) VALUES

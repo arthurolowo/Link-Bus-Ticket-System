@@ -9,8 +9,10 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 128 }).notNull().unique(),
   password: varchar('password', { length: 128 }).notNull(),
   phone: varchar('phone', { length: 32 }),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+  is_admin: pgBoolean('is_admin').default(false),
+  is_verified: pgBoolean('is_verified').default(false),
+  created_at: timestamp('created_at').defaultNow(),
+  updated_at: timestamp('updated_at').defaultNow(),
 });
 
 // BOOKINGS TABLE

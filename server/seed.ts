@@ -1,7 +1,9 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { busTypes, buses, routes, trips, BusType, Route, Bus, Trip } from './schema';
+import { busTypes, buses, routes, trips, users, bookings } from './schema';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
 
@@ -13,6 +15,39 @@ const db = drizzle(pool);
 
 async function seed() {
   try {
+    // Clear existing data
+    console.log('Clearing existing data...');
+    await db.delete(bookings);
+    await db.delete(trips);
+    await db.delete(buses);
+    await db.delete(routes);
+    await db.delete(busTypes);
+    await db.delete(users);
+    console.log('✅ Existing data cleared successfully!');
+
+    // Create test users
+    const hashedPassword = await bcrypt.hash('password123', 10);
+    
+    const [adminUser] = await db.insert(users).values({
+      id: uuidv4(),
+      name: 'Admin User',
+      email: 'admin@example.com',
+      password: hashedPassword,
+      is_admin: true,
+      is_verified: true,
+    }).returning();
+
+    const [regularUser] = await db.insert(users).values({
+      id: uuidv4(),
+      name: 'Regular User',
+      email: 'user@example.com',
+      password: hashedPassword,
+      is_admin: false,
+      is_verified: true,
+    }).returning();
+
+    console.log('✅ Test users created successfully!');
+
     // Insert bus types
     const busTypesData = await db.insert(busTypes).values([
       {
@@ -29,7 +64,7 @@ async function seed() {
           }))
         },
         totalSeats: 40
-      } as BusType,
+      },
       {
         name: 'Standard Coach',
         description: 'Comfortable bus with standard amenities',
@@ -44,8 +79,10 @@ async function seed() {
           }))
         },
         totalSeats: 48
-      } as BusType
+      }
     ]).returning();
+
+    console.log('✅ Bus types created successfully!');
 
     // Insert routes (from and to Kampala)
     const routesData = await db.insert(routes).values([
@@ -86,6 +123,8 @@ async function seed() {
       }
     ]).returning();
 
+    console.log('✅ Routes created successfully!');
+
     // Insert buses
     const busesData = await db.insert(buses).values([
       {
@@ -110,9 +149,20 @@ async function seed() {
       }
     ]).returning();
 
+    console.log('✅ Buses created successfully!');
+
     // Insert trips (for the next 7 days)
     const today = new Date();
-    const tripData: Omit<Trip, 'id'>[] = [];
+    const tripData: {
+      routeId: number;
+      busId: number;
+      departureDate: string;
+      departureTime: string;
+      arrivalTime: string;
+      price: string;
+      availableSeats: number;
+      status: string;
+    }[] = [];
 
     for (let i = 0; i < 7; i++) {
       const date = new Date(today);
@@ -160,8 +210,13 @@ async function seed() {
     }
 
     await db.insert(trips).values(tripData);
+    console.log('✅ Trips created successfully!');
 
-    console.log('✅ Sample data inserted successfully!');
+    console.log('✅ All sample data inserted successfully!');
+    console.log('\nTest accounts:');
+    console.log('Admin - Email: admin@example.com, Password: password123');
+    console.log('User  - Email: user@example.com, Password: password123');
+    
     process.exit(0);
   } catch (error) {
     console.error('❌ Error seeding data:', error);
