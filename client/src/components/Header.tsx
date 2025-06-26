@@ -35,6 +35,11 @@ export function Header() {
           <Link to="/routes" className="text-sm font-medium hover:text-primary">
             Routes
           </Link>
+          {user && (
+            <Link to="/bookings" className="text-sm font-medium hover:text-primary">
+              My Bookings
+            </Link>
+          )}
           <Link to="/support" className="text-sm font-medium hover:text-primary">
             Support
           </Link>

@@ -14,6 +14,8 @@ import Support from './pages/Support';
 import AdminDashboard from './pages/AdminDashboard';
 import NotFound from './pages/not-found';
 import SearchResults from './pages/SearchResults';
+import RoutesPage from './pages/RoutesPage';
+import Bookings from './pages/Bookings';
 
 function Router() {
   const { user, loading } = useAuth();
@@ -27,10 +29,13 @@ function Router() {
       {/* Public Routes */}
       <Route path="/" element={!user ? <Landing /> : <Home />} />
       <Route path="/search-results" element={<SearchResults />} />
+      <Route path="/routes" element={<RoutesPage />} />
 
       {/* Protected Routes */}
       {user && (
         <>
+          <Route path="/home" element={<Home />} />
+          <Route path="/bookings" element={<Bookings />} />
           <Route path="/support" element={<Support />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </>

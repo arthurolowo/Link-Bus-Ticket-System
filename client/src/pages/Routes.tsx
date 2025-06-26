@@ -9,6 +9,7 @@ import Support from './Support';
 import AdminDashboard from './AdminDashboard';
 import NotFound from './not-found';
 import SearchResults from './SearchResults';
+import RoutesPage from './RoutesPage.tsx';
 
 export default function Routes() {
   const { user } = useAuth();
@@ -18,6 +19,7 @@ export default function Routes() {
       {/* Public Routes */}
       <Route path="/" element={!user ? <Landing /> : <Home />} />
       <Route path="/search-results" element={<SearchResults />} />
+      <Route path="/routes" element={<RoutesPage />} />
 
       {/* Protected Routes */}
       <Route
