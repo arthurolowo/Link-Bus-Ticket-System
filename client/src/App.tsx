@@ -13,6 +13,7 @@ import Home from './pages/Home';
 import Support from './pages/Support';
 import AdminDashboard from './pages/AdminDashboard';
 import NotFound from './pages/not-found';
+import SearchResults from './pages/SearchResults';
 
 function Router() {
   const { user, loading } = useAuth();
@@ -23,15 +24,19 @@ function Router() {
 
   return (
     <Routes>
-      {!user ? (
-        <Route path="/" element={<Landing />} />
-      ) : (
+      {/* Public Routes */}
+      <Route path="/" element={!user ? <Landing /> : <Home />} />
+      <Route path="/search-results" element={<SearchResults />} />
+
+      {/* Protected Routes */}
+      {user && (
         <>
-          <Route path="/" element={<Home />} />
           <Route path="/support" element={<Support />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </>
       )}
+
+      {/* 404 Route */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

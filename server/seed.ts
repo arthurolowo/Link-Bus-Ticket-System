@@ -151,7 +151,7 @@ async function seed() {
 
     console.log('✅ Buses created successfully!');
 
-    // Insert trips (for the next 7 days)
+    // Insert trips (for today and the next 7 days)
     const today = new Date();
     const tripData: {
       routeId: number;
@@ -164,7 +164,8 @@ async function seed() {
       status: string;
     }[] = [];
 
-    for (let i = 0; i < 7; i++) {
+    // Add trips for today and next 7 days
+    for (let i = 0; i < 8; i++) {
       const date = new Date(today);
       date.setDate(date.getDate() + i);
       const dateStr = date.toISOString().split('T')[0];

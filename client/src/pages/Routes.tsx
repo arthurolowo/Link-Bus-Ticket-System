@@ -8,6 +8,7 @@ import Home from './Home';
 import Support from './Support';
 import AdminDashboard from './AdminDashboard';
 import NotFound from './not-found';
+import SearchResults from './SearchResults';
 
 export default function Routes() {
   const { user } = useAuth();
@@ -16,6 +17,7 @@ export default function Routes() {
     <RouterRoutes>
       {/* Public Routes */}
       <Route path="/" element={!user ? <Landing /> : <Home />} />
+      <Route path="/search-results" element={<SearchResults />} />
 
       {/* Protected Routes */}
       <Route

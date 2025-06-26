@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -9,16 +10,20 @@ import { UGANDAN_CITIES, UgandanCity } from '../types';
 
 export default function Home() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useState({
-    origin: '' as UgandanCity,
-    destination: '' as UgandanCity,
+    from: '' as UgandanCity,
+    to: '' as UgandanCity,
     date: new Date().toISOString().split('T')[0],
-    passengers: 1,
+    passengers: '1',
   });
 
-  const handleSearch = () => {
-    // TODO: Implement search functionality
-    console.log('Search params:', searchParams);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchParams.from || !searchParams.to || !searchParams.date) {
+      return;
+    }
+    navigate('/search-results', { state: searchParams });
   };
 
   return (
@@ -35,74 +40,85 @@ export default function Home() {
           <CardTitle>Search for Buses</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="origin">From</Label>
-              <Select
-                value={searchParams.origin}
-                onValueChange={(value: UgandanCity) => setSearchParams((prev) => ({ ...prev, origin: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select departure city" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UGANDAN_CITIES.map((city) => (
-                    <SelectItem key={city} value={city}>
-                      {city}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <form onSubmit={handleSearch}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="from">From</Label>
+                <Select
+                  value={searchParams.from}
+                  onValueChange={(value: UgandanCity) => setSearchParams((prev) => ({ ...prev, from: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select departure city" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UGANDAN_CITIES.map((city) => (
+                      <SelectItem key={city} value={city}>
+                        {city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="to">To</Label>
+                <Select
+                  value={searchParams.to}
+                  onValueChange={(value: UgandanCity) => setSearchParams((prev) => ({ ...prev, to: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select destination" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UGANDAN_CITIES.filter((city) => city !== searchParams.from).map((city) => (
+                      <SelectItem key={city} value={city}>
+                        {city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="date">Travel Date</Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={searchParams.date}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setSearchParams((prev) => ({ ...prev, date: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="passengers">Passengers</Label>
+                <Select
+                  value={searchParams.passengers}
+                  onValueChange={(value) => setSearchParams((prev) => ({ ...prev, passengers: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select passengers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map((num) => (
+                      <SelectItem key={num} value={num.toString()}>
+                        {num} {num === 1 ? 'passenger' : 'passengers'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="destination">To</Label>
-              <Select
-                value={searchParams.destination}
-                onValueChange={(value: UgandanCity) => setSearchParams((prev) => ({ ...prev, destination: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select destination" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UGANDAN_CITIES.filter((city) => city !== searchParams.origin).map((city) => (
-                    <SelectItem key={city} value={city}>
-                      {city}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="date">Travel Date</Label>
-              <Input
-                id="date"
-                type="date"
-                value={searchParams.date}
-                min={new Date().toISOString().split('T')[0]}
-                onChange={(e) => setSearchParams((prev) => ({ ...prev, date: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="passengers">Passengers</Label>
-              <Input
-                id="passengers"
-                type="number"
-                min={1}
-                max={10}
-                value={searchParams.passengers}
-                onChange={(e) =>
-                  setSearchParams((prev) => ({ ...prev, passengers: parseInt(e.target.value) || 1 }))
-                }
-              />
-            </div>
-          </div>
-
-          <Button onClick={handleSearch} className="mt-6 w-full">
-            Search Buses
-          </Button>
+            <Button 
+              type="submit"
+              className="mt-6 w-full"
+              disabled={!searchParams.from || !searchParams.to || !searchParams.date}
+            >
+              Search Buses
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
@@ -114,7 +130,7 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 mb-4">View and manage your upcoming trips</p>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" onClick={() => navigate('/bookings')}>
               View Bookings
             </Button>
           </CardContent>
@@ -126,7 +142,7 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 mb-4">Check availability on frequently traveled routes</p>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" onClick={() => navigate('/routes')}>
               View Routes
             </Button>
           </CardContent>
@@ -138,7 +154,7 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 mb-4">Contact our support team for assistance</p>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" onClick={() => navigate('/support')}>
               Get Support
             </Button>
           </CardContent>

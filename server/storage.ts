@@ -109,7 +109,7 @@ export class DatabaseStorage implements IStorage {
         target: users.id,
         set: {
           ...userData,
-          updatedAt: new Date(),
+          updated_at: new Date(),
         },
       })
       .returning();
@@ -121,7 +121,7 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({
         ...userData,
-        updatedAt: new Date(),
+        updated_at: new Date(),
       })
       .where(eq(users.id, id))
       .returning();
@@ -249,10 +249,37 @@ export class DatabaseStorage implements IStorage {
 
     const results = await db
       .select({
-        trip: trips,
-        route: routes,
-        bus: buses,
-        busType: busTypes,
+        id: trips.id,
+        routeId: trips.routeId,
+        busId: trips.busId,
+        departureDate: trips.departureDate,
+        departureTime: trips.departureTime,
+        arrivalTime: trips.arrivalTime,
+        price: trips.price,
+        availableSeats: trips.availableSeats,
+        status: trips.status,
+        route: {
+          id: routes.id,
+          origin: routes.origin,
+          destination: routes.destination,
+          distance: routes.distance,
+          estimatedDuration: routes.estimatedDuration,
+          isActive: routes.isActive,
+        },
+        bus: {
+          id: buses.id,
+          busNumber: buses.busNumber,
+          busTypeId: buses.busTypeId,
+          isActive: buses.isActive,
+          busType: {
+            id: busTypes.id,
+            name: busTypes.name,
+            description: busTypes.description,
+            amenities: busTypes.amenities,
+            seatLayout: busTypes.seatLayout,
+            totalSeats: busTypes.totalSeats,
+          },
+        },
       })
       .from(trips)
       .leftJoin(routes, eq(trips.routeId, routes.id))
@@ -261,14 +288,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(...whereClauses))
       .orderBy(trips.departureTime);
 
-    return results.map(row => ({
-      ...row.trip,
-      route: row.route!,
-      bus: {
-        ...row.bus!,
-        busType: row.busType!
-      }
-    }));
+    return results as unknown as TripWithDetails[];
   }
 
   async getTripById(id: number): Promise<TripWithDetails | undefined> {

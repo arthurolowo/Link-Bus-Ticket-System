@@ -1,13 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useNavigate } from 'react-router-dom';
 import { Button } from "./ui/button";
-import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Alert, AlertDescription } from "./ui/alert";
-import { Bus, Calendar, MapPin, Users, AlertCircle } from "lucide-react";
-import { SearchParams, UGANDAN_CITIES } from "../types";
-import { useNavigate } from 'react-router-dom';
+
+const UGANDAN_CITIES = [
+  'Kampala',
+  'Mbarara',
+  'Gulu',
+  'Jinja',
+  'Mbale',
+  'Fort Portal',
+  'Masaka',
+  'Arua',
+  'Kabale',
+  'Soroti'
+];
 
 export function SearchForm() {
   const navigate = useNavigate();
@@ -18,81 +27,135 @@ export function SearchForm() {
     passengers: '1'
   });
 
+  const [errors, setErrors] = useState({
+    from: '',
+    to: '',
+    date: ''
+  });
+
+  const validateForm = () => {
+    const newErrors = {
+      from: '',
+      to: '',
+      date: ''
+    };
+
+    if (!UGANDAN_CITIES.includes(formData.from)) {
+      newErrors.from = 'Please select a valid departure city';
+    }
+
+    if (!UGANDAN_CITIES.includes(formData.to)) {
+      newErrors.to = 'Please select a valid destination city';
+    }
+
+    if (formData.from === formData.to) {
+      newErrors.to = 'Destination must be different from departure';
+    }
+
+    const selectedDate = new Date(formData.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (!formData.date || selectedDate < today) {
+      newErrors.date = 'Please select a valid future date';
+    }
+
+    setErrors(newErrors);
+    return !Object.values(newErrors).some(error => error !== '');
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/search-results', { state: formData });
+    if (validateForm()) {
+      navigate('/search-results', { state: formData });
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear error when user starts typing
+    setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
   return (
-    <form onSubmit={handleSubmit} className="card">
-      <div className="flex gap-4 mb-4">
-        <div className="w-full">
-          <label htmlFor="from" className="mb-2 text-sm">From</label>
-          <input
+    <form onSubmit={handleSubmit} className="space-y-6 p-6 bg-white rounded-lg shadow-md">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="from">From</Label>
+          <Input
             type="text"
             id="from"
             name="from"
-            className="input"
+            className={errors.from ? 'border-red-500' : ''}
             placeholder="Departure city"
             value={formData.from}
             onChange={handleChange}
+            list="cities"
             required
           />
+          {errors.from && <p className="text-sm text-red-500">{errors.from}</p>}
         </div>
         
-        <div className="w-full">
-          <label htmlFor="to" className="mb-2 text-sm">To</label>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="to">To</Label>
+          <Input
             type="text"
             id="to"
             name="to"
-            className="input"
+            className={errors.to ? 'border-red-500' : ''}
             placeholder="Destination city"
             value={formData.to}
             onChange={handleChange}
+            list="cities"
             required
           />
+          {errors.to && <p className="text-sm text-red-500">{errors.to}</p>}
         </div>
       </div>
 
-      <div className="flex gap-4">
-        <div className="w-full">
-          <label htmlFor="date" className="mb-2 text-sm">Date</label>
-          <input
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="date">Date</Label>
+          <Input
             type="date"
             id="date"
             name="date"
-            className="input"
+            className={errors.date ? 'border-red-500' : ''}
             value={formData.date}
             onChange={handleChange}
+            min={new Date().toISOString().split('T')[0]}
             required
           />
+          {errors.date && <p className="text-sm text-red-500">{errors.date}</p>}
         </div>
 
-        <div className="w-full">
-          <label htmlFor="passengers" className="mb-2 text-sm">Passengers</label>
-          <select
-            id="passengers"
-            name="passengers"
-            className="input"
-            value={formData.passengers}
-            onChange={handleChange}
-          >
-            {[1, 2, 3, 4, 5].map(num => (
-              <option key={num} value={num}>{num} {num === 1 ? 'passenger' : 'passengers'}</option>
-            ))}
-          </select>
+        <div className="space-y-2">
+          <Label htmlFor="passengers">Passengers</Label>
+          <Select name="passengers" value={formData.passengers} onValueChange={(value) => handleChange({ target: { name: 'passengers', value } } as any)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select passengers" />
+            </SelectTrigger>
+            <SelectContent>
+              {[1, 2, 3, 4, 5].map(num => (
+                <SelectItem key={num} value={num.toString()}>
+                  {num} {num === 1 ? 'passenger' : 'passengers'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      <button type="submit" className="btn btn-primary mt-4 w-full">
+      <Button type="submit" className="w-full">
         Search Buses
-      </button>
+      </Button>
+
+      <datalist id="cities">
+        {UGANDAN_CITIES.map(city => (
+          <option key={city} value={city} />
+        ))}
+      </datalist>
     </form>
   );
 }

@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from 'react-router-dom';
+import { formatCurrency } from '../lib/utils';
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -16,8 +18,6 @@ import {
 } from "./ui/sheet";
 import SeatSelection from "./SeatSelection";
 import { SearchParams, TripWithDetails } from "../types";
-import { useNavigate } from 'react-router-dom';
-import { formatCurrency } from '@/lib/utils';
 
 interface Bus {
   id: string;

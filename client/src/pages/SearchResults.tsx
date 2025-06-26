@@ -1,0 +1,83 @@
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { BusResults } from '../components/BusResults';
+
+interface SearchState {
+  from: string;
+  to: string;
+  date: string;
+  passengers: string;
+}
+
+interface Trip {
+  id: string;
+  company: string;
+  departureTime: string;
+  arrivalTime: string;
+  price: number;
+  seatsAvailable: number;
+  busType: string;
+}
+
+export default function SearchResults() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const searchParams = location.state as SearchState;
+
+  useEffect(() => {
+    if (!searchParams) {
+      navigate('/');
+      return;
+    }
+
+    const fetchTrips = async () => {
+      try {
+        const params = new URLSearchParams({
+          origin: searchParams.from,
+          destination: searchParams.to,
+          date: searchParams.date,
+        });
+
+        const response = await fetch(`/api/trips/search?${params}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch trips');
+        }
+
+        const data = await response.json();
+        // Transform the API response to match the BusResults component's expected format
+        const transformedTrips = data.map((trip: any) => ({
+          id: trip.id.toString(),
+          company: trip.bus.busType.name,
+          departureTime: trip.departureTime,
+          arrivalTime: trip.arrivalTime,
+          price: parseFloat(trip.price),
+          seatsAvailable: trip.availableSeats,
+          busType: trip.bus.busType.name,
+        }));
+
+        setTrips(transformedTrips);
+      } catch (error) {
+        console.error('Error fetching trips:', error);
+        setTrips([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTrips();
+  }, [searchParams, navigate]);
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold mb-2">Search Results</h1>
+        <p className="text-gray-600">
+          Showing buses from {searchParams?.from} to {searchParams?.to} on {searchParams?.date}
+        </p>
+      </div>
+      <BusResults buses={trips} loading={loading} />
+    </div>
+  );
+} 
