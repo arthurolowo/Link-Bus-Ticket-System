@@ -97,21 +97,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const busTypeData = busTypeSchema.partial().parse(req.body);
-      // TODO: Implement updateBusType in storage
-      return res.status(501).json({ message: "Not implemented" });
+      const updatedBusType = await storage.updateBusType(id, busTypeData);
+      
+      if (!updatedBusType) {
+        return res.status(404).json({ message: "Bus type not found" });
+      }
+      
+      res.json(updatedBusType);
     } catch (error) {
       console.error("Error updating bus type:", error);
-      res.status(400).json({ message: "Invalid bus type data" });
+      res.status(400).json({ message: error instanceof Error ? error.message : "Invalid bus type data" });
     }
   });
 
   app.delete("/api/bus-types/:id", verifyToken, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      // TODO: Implement deleteBusType in storage
-      return res.status(501).json({ message: "Not implemented" });
+      const success = await storage.deleteBusType(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Bus type not found" });
+      }
+      
+      res.json({ message: "Bus type deleted successfully" });
     } catch (error) {
       console.error("Error deleting bus type:", error);
+      if (error instanceof Error && error.message.includes('in use')) {
+        return res.status(400).json({ message: error.message });
+      }
       res.status(500).json({ message: "Failed to delete bus type" });
     }
   });

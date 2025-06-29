@@ -22,6 +22,9 @@ import { useToast } from '../hooks/use-toast';
 import { useAuth } from '../hooks/useAuth';
 import { Navigate } from 'react-router-dom';
 import { formatCurrency } from '../lib/utils';
+import { BusTypeManager } from "../components/admin/BusTypeManager";
+import { RouteManager } from "../components/admin/RouteManager";
+import { TripManager } from "../components/admin/TripManager";
 
 interface BookingWithDetails extends Booking {
   passengerName: string;
@@ -152,10 +155,12 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-96">
+          <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="bookings">Bookings</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="buses">Buses</TabsTrigger>
+            <TabsTrigger value="routes">Routes</TabsTrigger>
+            <TabsTrigger value="trips">Trips</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -466,49 +471,16 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="analytics" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Booking Trends</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 bg-muted rounded-lg flex items-center justify-center">
-                    <div className="text-center">
-                      <BarChart className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                      <div className="text-muted-foreground">Booking Trends Chart</div>
-                      <div className="text-sm text-muted-foreground">Integration with Chart.js</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          <TabsContent value="buses">
+            <BusTypeManager />
+          </TabsContent>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Popular Routes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {[
-                      { route: "Kampala → Mbarara", bookings: 324, revenue: "14.5M" },
-                      { route: "Kampala → Gulu", bookings: 298, revenue: "13.2M" },
-                      { route: "Kampala → Jinja", bookings: 256, revenue: "8.9M" },
-                    ].map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 hover:bg-muted/50 rounded-lg">
-                        <div>
-                          <div className="font-medium">{item.route}</div>
-                          <div className="text-sm text-muted-foreground">{item.bookings} bookings this month</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-semibold text-primary">UGX {formatCurrency(item.revenue)}</div>
-                          <div className="text-sm text-muted-foreground">Revenue</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+          <TabsContent value="routes">
+            <RouteManager />
+          </TabsContent>
+
+          <TabsContent value="trips">
+            <TripManager />
           </TabsContent>
         </Tabs>
       </div>

@@ -28,7 +28,7 @@ export function Header() {
           <span className="text-xl font-bold">Link Bus</span>
         </Link>
         
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-6">
           <Link to="/" className="text-sm font-medium hover:text-primary">
             Home
           </Link>
@@ -38,6 +38,11 @@ export function Header() {
           {user && (
             <Link to="/bookings" className="text-sm font-medium hover:text-primary">
               My Bookings
+            </Link>
+          )}
+          {user?.isAdmin && (
+            <Link to="/admin" className="text-sm font-medium hover:text-primary">
+              Admin Dashboard
             </Link>
           )}
           <Link to="/support" className="text-sm font-medium hover:text-primary">

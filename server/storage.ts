@@ -19,12 +19,13 @@ import {
   type Booking,
   type InsertBooking,
   type BookingWithDetails,
-} from "./schema";
+} from "./schema.js";
 import 'dotenv/config';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
+import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 
-import * as schema from "./schema";
+import * as schema from "./schema.js";
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -34,7 +35,6 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
-import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 
 export interface TripSearchFilters {
   minTime?: string;
@@ -60,6 +60,8 @@ export interface IStorage {
   // Bus type operations
   getAllBusTypes(): Promise<BusType[]>;
   createBusType(busType: InsertBusType): Promise<BusType>;
+  updateBusType(id: number, busType: Partial<InsertBusType>): Promise<BusType | undefined>;
+  deleteBusType(id: number): Promise<boolean>;
 
   // Bus operations
   getAllBuses(): Promise<(Bus & { busType: BusType })[]>;
@@ -75,6 +77,8 @@ export interface IStorage {
   updateTripAvailability(tripId: number, seatsToBook: number): Promise<boolean>;
   cancelTrip(id: number): Promise<boolean>;
   getWeeklySchedule(): Promise<TripWithDetails[]>;
+  getAllTrips(): Promise<TripWithDetails[]>;
+  deleteTrip(id: number): Promise<boolean>;
 
   // Booking operations
   createBooking(booking: InsertBooking): Promise<Booking>;
@@ -87,6 +91,14 @@ export interface IStorage {
 
   // Analytics
   getBookingStats(): Promise<{
+    totalBookings: number;
+    totalRevenue: string;
+    activeRoutes: number;
+    occupancyRate: number;
+  }>;
+
+  // Admin stats
+  getAdminStats(): Promise<{
     totalBookings: number;
     totalRevenue: string;
     activeRoutes: number;
@@ -178,12 +190,46 @@ export class DatabaseStorage implements IStorage {
 
   // Bus type operations
   async getAllBusTypes(): Promise<BusType[]> {
-    return await db.select().from(busTypes);
+    return await db
+      .select()
+      .from(busTypes)
+      .where(sql`1 = 1`);
   }
 
   async createBusType(busType: InsertBusType): Promise<BusType> {
-    const [newBusType] = await db.insert(busTypes).values(busType).returning();
+    const [newBusType] = await db
+      .insert(busTypes)
+      .values(busType)
+      .returning();
     return newBusType;
+  }
+
+  async updateBusType(id: number, busType: Partial<InsertBusType>): Promise<BusType | undefined> {
+    const [updatedBusType] = await db
+      .update(busTypes)
+      .set(busType)
+      .where(eq(busTypes.id, id))
+      .returning();
+    return updatedBusType;
+  }
+
+  async deleteBusType(id: number): Promise<boolean> {
+    // First check if there are any buses using this bus type
+    const [existingBus] = await db
+      .select()
+      .from(buses)
+      .where(eq(buses.busTypeId, id))
+      .limit(1);
+
+    if (existingBus) {
+      throw new Error('Cannot delete bus type that is in use by buses');
+    }
+
+    const [deletedBusType] = await db
+      .delete(busTypes)
+      .where(eq(busTypes.id, id))
+      .returning();
+    return !!deletedBusType;
   }
 
   // Bus operations
@@ -235,16 +281,24 @@ export class DatabaseStorage implements IStorage {
       eq(routes.origin, origin),
       eq(routes.destination, destination),
       eq(trips.departureDate, date),
-      eq(trips.status, "scheduled"),
-      gte(trips.availableSeats, 1)
     ];
 
     if (filters) {
-      if (filters.minTime) whereClauses.push(gte(trips.departureTime, filters.minTime));
-      if (filters.maxTime) whereClauses.push(lte(trips.departureTime, filters.maxTime));
-      if (filters.minPrice) whereClauses.push(gte(trips.price, filters.minPrice));
-      if (filters.maxPrice) whereClauses.push(lte(trips.price, filters.maxPrice));
-      if (filters.busType) whereClauses.push(eq(busTypes.name, filters.busType));
+      if (filters.minTime) {
+        whereClauses.push(gte(trips.departureTime, filters.minTime));
+      }
+      if (filters.maxTime) {
+        whereClauses.push(lte(trips.departureTime, filters.maxTime));
+      }
+      if (filters.minPrice) {
+        whereClauses.push(gte(trips.price, filters.minPrice));
+      }
+      if (filters.maxPrice) {
+        whereClauses.push(lte(trips.price, filters.maxPrice));
+      }
+      if (filters.busType) {
+        whereClauses.push(eq(busTypes.name, filters.busType));
+      }
     }
 
     const results = await db
@@ -288,7 +342,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(...whereClauses))
       .orderBy(trips.departureTime);
 
-    return results as unknown as TripWithDetails[];
+    return results;
   }
 
   async getTripById(id: number): Promise<TripWithDetails | undefined> {
@@ -392,6 +446,50 @@ export class DatabaseStorage implements IStorage {
         busType: row.busType!
       }
     }));
+  }
+
+  async getAllTrips(): Promise<TripWithDetails[]> {
+    const results = await db
+      .select()
+      .from(trips)
+      .leftJoin(routes, eq(trips.routeId, routes.id))
+      .leftJoin(buses, eq(trips.busId, buses.id))
+      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id));
+
+    return results.map(row => {
+      const trip: Trip = {
+        id: row.trips.id,
+        routeId: row.trips.routeId,
+        busId: row.trips.busId,
+        departureDate: row.trips.departureDate,
+        departureTime: row.trips.departureTime,
+        arrivalTime: row.trips.arrivalTime,
+        price: row.trips.price,
+        availableSeats: row.trips.availableSeats,
+        status: row.trips.status,
+      };
+
+      const route: Route = row.routes!;
+      const bus: Bus = row.buses!;
+      const busType: BusType = row.bus_types!;
+
+      return {
+        ...trip,
+        route,
+        bus: {
+          ...bus,
+          busType
+        }
+      };
+    });
+  }
+
+  async deleteTrip(id: number): Promise<boolean> {
+    const [deletedTrip] = await db
+      .delete(trips)
+      .where(eq(trips.id, id))
+      .returning();
+    return !!deletedTrip;
   }
 
   // Booking operations
@@ -565,6 +663,57 @@ export class DatabaseStorage implements IStorage {
     return {
       totalBookings,
       totalRevenue: totalRevenue.toString(),
+      activeRoutes,
+      occupancyRate,
+    };
+  }
+
+  // Admin stats
+  async getAdminStats(): Promise<{
+    totalBookings: number;
+    totalRevenue: string;
+    activeRoutes: number;
+    occupancyRate: number;
+  }> {
+    // Get total bookings
+    const [bookingsResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(bookings);
+    const totalBookings = bookingsResult?.count || 0;
+
+    // Get total revenue
+    const [revenueResult] = await db
+      .select({ sum: sql<string>`sum(cast(total_amount as decimal))` })
+      .from(bookings)
+      .where(eq(bookings.paymentStatus, 'completed'));
+    const totalRevenue = revenueResult?.sum || '0';
+
+    // Get active routes
+    const [routesResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(routes)
+      .where(eq(routes.isActive, 1));
+    const activeRoutes = routesResult?.count || 0;
+
+    // Calculate occupancy rate
+    const [occupancyResult] = await db
+      .select({
+        booked: sql<number>`count(distinct ${bookings.id})`.as('booked'),
+        total: sql<number>`sum(${busTypes.totalSeats})`.as('total')
+      })
+      .from(trips)
+      .leftJoin(buses, eq(trips.busId, buses.id))
+      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .leftJoin(bookings, eq(trips.id, bookings.tripId))
+      .where(eq(trips.status, 'completed'));
+    
+    const occupancyRate = occupancyResult?.total
+      ? Math.round((occupancyResult.booked / occupancyResult.total) * 100)
+      : 0;
+
+    return {
+      totalBookings,
+      totalRevenue,
       activeRoutes,
       occupancyRate,
     };
