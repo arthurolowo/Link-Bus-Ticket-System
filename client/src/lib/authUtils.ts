@@ -46,7 +46,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.message);
+    throw new Error(error.message || 'Failed to login');
   }
 
   const data = await response.json();
@@ -65,7 +65,7 @@ export async function register(name: string, email: string, password: string, ph
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.message);
+    throw new Error(error.message || 'Failed to register');
   }
 
   const data = await response.json();
@@ -73,32 +73,28 @@ export async function register(name: string, email: string, password: string, ph
   return data;
 }
 
-export async function logout() {
+export async function logout(): Promise<void> {
   removeToken();
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  try {
-    const token = getToken();
-    if (!token) return null;
+  const token = getToken();
+  if (!token) return null;
 
-    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        removeToken();
-        return null;
-      }
-      throw new Error('Failed to fetch user');
+  if (!response.ok) {
+    if (response.status === 401) {
+      removeToken();
+      return null;
     }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching current user:', error);
-    return null;
+    throw new Error('Failed to get current user');
   }
+
+  const user = await response.json();
+  return user;
 }

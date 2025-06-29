@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { useAuth } from '../hooks/useAuth';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { useToast } from '../hooks/use-toast';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
+import { useAuth } from '../../hooks/useAuth';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { useToast } from '../../hooks/use-toast';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../ui/card';
 import { useNavigate } from 'react-router-dom';
 
-export function LoginForm() {
+export function AdminLoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -21,15 +21,22 @@ export function LoginForm() {
 
     try {
       const { user } = await login(email, password);
+      
+      if (!user.isAdmin) {
+        toast({
+          title: 'Access Denied',
+          description: 'This login is only for administrators.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       toast({
         title: 'Success',
-        description: 'You have been logged in successfully.',
+        description: 'Welcome back, administrator!',
       });
       
-      // Redirect admin users to admin dashboard
-      if (user.isAdmin) {
-        navigate('/admin');
-      }
+      navigate('/admin/dashboard');
     } catch (error) {
       toast({
         title: 'Error',
@@ -42,10 +49,12 @@ export function LoginForm() {
   };
 
   return (
-    <Card className="w-[350px]">
+    <Card className="w-full max-w-md mx-auto">
       <CardHeader>
-        <CardTitle>Login</CardTitle>
-        <CardDescription>Enter your credentials to access your account</CardDescription>
+        <CardTitle>Admin Login</CardTitle>
+        <CardDescription>
+          Please enter your administrator credentials to continue.
+        </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -54,7 +63,7 @@ export function LoginForm() {
             <Input
               id="email"
               type="email"
-              placeholder="Enter your email"
+              placeholder="admin@linkbus.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -65,7 +74,6 @@ export function LoginForm() {
             <Input
               id="password"
               type="password"
-              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -73,7 +81,11 @@ export function LoginForm() {
           </div>
         </CardContent>
         <CardFooter>
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={isLoading}
+          >
             {isLoading ? 'Logging in...' : 'Login'}
           </Button>
         </CardFooter>

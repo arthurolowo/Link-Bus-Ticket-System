@@ -41,7 +41,7 @@ export function Header() {
             </Link>
           )}
           {user?.isAdmin && (
-            <Link to="/admin" className="text-sm font-medium hover:text-primary">
+            <Link to="/admin/dashboard" className="text-sm font-medium hover:text-primary">
               Admin Dashboard
             </Link>
           )}

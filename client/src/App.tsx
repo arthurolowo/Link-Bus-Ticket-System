@@ -11,6 +11,7 @@ import { Header } from './components/Header';
 import Landing from './pages/Landing';
 import Home from './pages/Home';
 import Support from './pages/Support';
+import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import NotFound from './pages/not-found';
 import SearchResults from './pages/SearchResults';
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/" element={!user ? <Landing /> : <Home />} />
       <Route path="/search-results" element={<SearchResults />} />
       <Route path="/routes" element={<RoutesPage />} />
+      <Route path="/admin" element={<AdminLogin />} />
 
       {/* Protected Routes */}
       {user && (
@@ -37,7 +39,9 @@ function Router() {
           <Route path="/home" element={<Home />} />
           <Route path="/bookings" element={<Bookings />} />
           <Route path="/support" element={<Support />} />
-          <Route path="/admin" element={<AdminDashboard />} />
+          {user.isAdmin && (
+            <Route path="/admin/dashboard/*" element={<AdminDashboard />} />
+          )}
         </>
       )}
 

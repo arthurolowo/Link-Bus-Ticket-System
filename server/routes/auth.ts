@@ -1,10 +1,10 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../storage';
-import { users } from '../schema';
+import { db } from '../storage.js';
+import { users } from '../schema.js';
 import { eq } from 'drizzle-orm';
-import { verifyToken, AuthRequest, generateToken } from '../middleware/auth';
+import { auth, AuthRequest, generateToken } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -86,7 +86,11 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate token
-    const token = generateToken({ id: user.id, email: user.email });
+    const token = generateToken({ 
+      id: user.id, 
+      email: user.email,
+      isAdmin: user.is_admin || false
+    });
 
     res.json({
       token,
@@ -94,6 +98,9 @@ router.post('/login', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
+        isAdmin: user.is_admin || false,
+        isVerified: user.is_verified || false,
+        phone: user.phone
       },
     });
   } catch (error) {
@@ -103,7 +110,10 @@ router.post('/login', async (req, res) => {
 });
 
 // Get current user
-router.get('/me', verifyToken, (req: AuthRequest, res: Response) => {
+router.get('/me', auth, (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Not authenticated' });
+  }
   res.json(req.user);
 });
 

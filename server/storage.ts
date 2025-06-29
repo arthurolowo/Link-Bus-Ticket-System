@@ -5,7 +5,7 @@ import {
   buses,
   trips,
   bookings,
-  type User,
+  type DBUser,
   type UpsertUser,
   type Route,
   type InsertRoute,
@@ -34,7 +34,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle(pool, { schema });
+export const db = drizzle(pool, { schema: { users, routes, busTypes, buses, trips, bookings } });
 
 export interface TripSearchFilters {
   minTime?: string;
@@ -46,9 +46,9 @@ export interface TripSearchFilters {
 
 export interface IStorage {
   // User operations
-  getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
-  updateUser(id: string, user: Partial<User>): Promise<User | undefined>;
+  getUser(id: string): Promise<DBUser | undefined>;
+  upsertUser(userData: UpsertUser): Promise<DBUser>;
+  updateUser(id: string, user: Partial<DBUser>): Promise<DBUser | undefined>;
   initiatePasswordReset(email: string): Promise<boolean>;
 
   // Route operations
@@ -108,12 +108,12 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   // User operations
-  async getUser(id: string): Promise<User | undefined> {
+  async getUser(id: string): Promise<DBUser | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
+  async upsertUser(userData: UpsertUser): Promise<DBUser> {
     const [user] = await db
       .insert(users)
       .values(userData)
@@ -128,7 +128,7 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async updateUser(id: string, userData: Partial<User>): Promise<User | undefined> {
+  async updateUser(id: string, userData: Partial<DBUser>): Promise<DBUser | undefined> {
     const [updatedUser] = await db
       .update(users)
       .set({

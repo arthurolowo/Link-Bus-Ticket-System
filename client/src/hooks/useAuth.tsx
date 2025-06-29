@@ -4,7 +4,7 @@ import { User, login as loginApi, register as registerApi, logout as logoutApi, 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ user: User }>;
   register: (name: string, email: string, password: string, phone?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -18,8 +18,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const user = await getCurrentUser();
-        setUser(user);
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
       } catch (error) {
         console.error('Error initializing auth:', error);
       } finally {
@@ -31,33 +31,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    try {
-      const { user } = await loginApi(email, password);
-      setUser(user);
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
+    const response = await loginApi(email, password);
+    setUser(response.user);
+    return response;
   };
 
   const register = async (name: string, email: string, password: string, phone?: string) => {
-    try {
-      const { user } = await registerApi(name, email, password, phone);
-      setUser(user);
-    } catch (error) {
-      console.error('Registration error:', error);
-      throw error;
-    }
+    const response = await registerApi(name, email, password, phone);
+    setUser(response.user);
   };
 
   const logout = async () => {
-    try {
-      await logoutApi();
-      setUser(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-      throw error;
-    }
+    await logoutApi();
+    setUser(null);
   };
 
   return (

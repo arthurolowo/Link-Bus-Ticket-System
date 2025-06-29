@@ -28,7 +28,7 @@ export const bookings = pgTable('bookings', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-export type User = InferModel<typeof users>;
+export type DBUser = InferModel<typeof users, 'select'>;
 export type UpsertUser = InferModel<typeof users, 'insert'>;
 export type Route = InferModel<typeof routes>;
 export type InsertRoute = InferModel<typeof routes, 'insert'>;
@@ -109,6 +109,8 @@ export const userSchema = z.object({
   email: z.string().email().max(128),
   password: z.string().min(6).max(128),
   phone: z.string().min(10).max(32).optional(),
+  is_admin: z.boolean().optional(),
+  is_verified: z.boolean().optional(),
 });
 
 export const routeSchema = z.object({

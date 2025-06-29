@@ -2,16 +2,19 @@ import 'dotenv/config';
 // console.log('DEBUG: DATABASE_URL loaded:', process.env.DATABASE_URL);
 // console.log('DEBUG: PORT loaded:', process.env.PORT);
 import express, { Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes.js";
-import { setupVite, serveStatic, log } from "./vite.js";
 import cors from 'cors';
+import router from "./routes.js";
+import { setupVite, serveStatic, log } from "./vite.js";
 import tripsRoutes from './routes/trips.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173', // Vite dev server
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -46,19 +49,18 @@ app.use((req, res, next) => {
 });
 
 // API Routes
+app.use('/api', router);
 app.use('/api/trips', tripsRoutes);
 
-// Register other routes
-registerRoutes(app).then((server) => {
-  // Error handling middleware
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || 'Internal Server Error';
-    res.status(status).json({ message });
-  });
+// Error handling middleware
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('Error:', err);
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || 'Internal Server Error';
+  res.status(status).json({ message });
+});
 
-  // Start server
-  server.listen(port, () => {
-    log(`Server running on port ${port}`);
-  });
+// Start server
+app.listen(port, () => {
+  log(`Server running on port ${port}`);
 });

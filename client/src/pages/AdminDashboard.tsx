@@ -16,7 +16,6 @@ import {
   Users,
   Search
 } from "lucide-react";
-import { Header } from "../components/Header";
 import type { Booking, TripWithDetails } from "../types";
 import { useToast } from '../hooks/use-toast';
 import { useAuth } from '../hooks/useAuth';
@@ -108,32 +107,65 @@ export default function AdminDashboard() {
     return matchesSearch && matchesPaymentStatus && matchesStatus && matchesPhone && matchesOrigin && matchesDestination && matchesStartDate && matchesEndDate;
   });
 
-  const handleAddRoute = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  const handleAddRouteClick = () => {
+    setActiveTab("routes");
+    // The RouteManager component will handle showing the add dialog
+  };
 
+  const handleExport = () => {
     try {
-      // TODO: Implement route addition
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated API call
+      // Convert bookings data to CSV format
+      const headers = [
+        'Booking Reference',
+        'Passenger Name',
+        'Passenger Phone',
+        'Payment Status',
+        'Booking Status',
+        'Origin',
+        'Destination',
+        'Departure Date',
+        'Amount'
+      ].join(',');
+
+      const rows = filteredBookings.map(booking => [
+        booking.bookingReference,
+        booking.passengerName,
+        booking.passengerPhone,
+        booking.paymentStatus,
+        booking.bookingStatus,
+        booking.trip.route.origin,
+        booking.trip.route.destination,
+        new Date(booking.trip.departureDate).toLocaleDateString(),
+        booking.trip.fare
+      ].join(','));
+
+      const csvContent = [headers, ...rows].join('\n');
+      
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `bookings_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
       toast({
         title: 'Success',
-        description: 'New route has been added successfully.',
+        description: 'Data exported successfully',
       });
     } catch (error) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to add route',
+        description: 'Failed to export data',
         variant: 'destructive',
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -142,11 +174,19 @@ export default function AdminDashboard() {
               <p className="text-muted-foreground">Manage routes, bookings, and monitor performance</p>
             </div>
             <div className="flex gap-3">
-              <Button className="btn-primary">
+              <Button 
+                className="btn-primary"
+                onClick={handleAddRouteClick}
+                disabled={isLoading}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Route
               </Button>
-              <Button variant="outline">
+              <Button 
+                variant="outline"
+                onClick={handleExport}
+                disabled={isLoading || isLoadingBookings}
+              >
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
