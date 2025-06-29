@@ -22,6 +22,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Navigate } from 'react-router-dom';
 import { formatCurrency } from '../lib/utils';
 import { BusTypeManager } from "../components/admin/BusTypeManager";
+import { BusManager } from "../components/admin/BusManager";
 import { RouteManager } from "../components/admin/RouteManager";
 import { TripManager } from "../components/admin/TripManager";
 
@@ -511,8 +512,11 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="buses">
-            <BusTypeManager />
+          <TabsContent value="buses" className="space-y-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <BusTypeManager />
+              <BusManager />
+            </div>
           </TabsContent>
 
           <TabsContent value="routes">

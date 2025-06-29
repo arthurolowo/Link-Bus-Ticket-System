@@ -5,6 +5,8 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
+  CardFooter,
 } from '../ui/card';
 import { Button } from '../ui/button';
 import {
@@ -18,8 +20,13 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, BusFront, Sofa, Wifi, Coffee, Power } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import { getToken } from '../../lib/authUtils';
+import { ScrollArea } from '../ui/scroll-area';
+import { Alert, AlertDescription } from '../ui/alert';
+
+const API_BASE_URL = 'http://localhost:5000';
 
 interface BusType {
   id: number;
@@ -45,6 +52,14 @@ interface BusTypeFormData {
   totalSeats: number;
 }
 
+// Map of amenity names to icons
+const amenityIcons: Record<string, React.ReactNode> = {
+  'WiFi': <Wifi className="w-4 h-4" />,
+  'Power Outlets': <Power className="w-4 h-4" />,
+  'Premium Seats': <Sofa className="w-4 h-4" />,
+  'Refreshments': <Coffee className="w-4 h-4" />,
+};
+
 export function BusTypeManager() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingBusType, setEditingBusType] = useState<BusType | null>(null);
@@ -58,11 +73,22 @@ export function BusTypeManager() {
   const queryClient = useQueryClient();
 
   // Fetch bus types
-  const { data: busTypes, isLoading } = useQuery<BusType[]>({
+  const { data: busTypes, isLoading, error } = useQuery<BusType[]>({
     queryKey: ['busTypes'],
     queryFn: async () => {
-      const response = await fetch('/api/bus-types');
-      if (!response.ok) throw new Error('Failed to fetch bus types');
+      const token = getToken();
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+      const response = await fetch(`${API_BASE_URL}/api/buses/types`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to fetch bus types');
+      }
       return response.json();
     },
   });
@@ -70,9 +96,13 @@ export function BusTypeManager() {
   // Add bus type mutation
   const addBusTypeMutation = useMutation({
     mutationFn: async (data: BusTypeFormData) => {
-      const response = await fetch('/api/bus-types', {
+      const token = getToken();
+      const response = await fetch(`${API_BASE_URL}/api/buses/types`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(data),
       });
       if (!response.ok) throw new Error('Failed to add bus type');
@@ -99,9 +129,13 @@ export function BusTypeManager() {
   // Update bus type mutation
   const updateBusTypeMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<BusTypeFormData> }) => {
-      const response = await fetch(`/api/bus-types/${id}`, {
+      const token = getToken();
+      const response = await fetch(`${API_BASE_URL}/api/buses/types/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(data),
       });
       if (!response.ok) throw new Error('Failed to update bus type');
@@ -128,8 +162,12 @@ export function BusTypeManager() {
   // Delete bus type mutation
   const deleteBusTypeMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await fetch(`/api/bus-types/${id}`, {
+      const token = getToken();
+      const response = await fetch(`${API_BASE_URL}/api/buses/types/${id}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
       if (!response.ok) throw new Error('Failed to delete bus type');
       return response.json();
@@ -186,13 +224,36 @@ export function BusTypeManager() {
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+          <p className="text-muted-foreground">Loading bus types...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive" className="my-4">
+        <AlertDescription>
+          {error instanceof Error ? error.message : 'Failed to load bus types'}
+        </AlertDescription>
+      </Alert>
+    );
   }
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Bus Types</CardTitle>
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <BusFront className="w-5 h-5" />
+            Bus Types
+          </CardTitle>
+          <CardDescription>Configure and manage different types of buses in your fleet</CardDescription>
+        </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => { setEditingBusType(null); resetForm(); }}>
@@ -200,19 +261,33 @@ export function BusTypeManager() {
               Add Bus Type
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>{editingBusType ? 'Edit Bus Type' : 'Add New Bus Type'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., VIP Executive"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="totalSeats">Total Seats</Label>
+                  <Input
+                    id="totalSeats"
+                    type="number"
+                    value={formData.totalSeats}
+                    onChange={(e) => setFormData({ ...formData, totalSeats: parseInt(e.target.value) })}
+                    placeholder="e.g., 48"
+                    required
+                  />
+                </div>
               </div>
               <div>
                 <Label htmlFor="description">Description</Label>
@@ -220,25 +295,20 @@ export function BusTypeManager() {
                   id="description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Describe the features and comfort level of this bus type"
+                  className="h-24"
+                  required
                 />
               </div>
               <div>
                 <Label htmlFor="amenities">Amenities (comma-separated)</Label>
-                <Input
+                <Textarea
                   id="amenities"
                   value={formData.amenities.join(', ')}
                   onChange={(e) => setFormData({ ...formData, amenities: e.target.value.split(',').map(s => s.trim()) })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="totalSeats">Total Seats</Label>
-                <Input
-                  id="totalSeats"
-                  type="number"
-                  value={formData.totalSeats}
-                  onChange={(e) => setFormData({ ...formData, totalSeats: parseInt(e.target.value) })}
+                  placeholder="WiFi, Power Outlets, Premium Seats, etc."
+                  className="h-24"
                   required
-                  min={1}
                 />
               </div>
               <Button type="submit" className="w-full">
@@ -249,41 +319,62 @@ export function BusTypeManager() {
         </Dialog>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {busTypes?.map((busType) => (
-            <div
-              key={busType.id}
-              className="flex items-center justify-between p-4 border rounded-lg"
-            >
-              <div>
-                <h3 className="font-medium">{busType.name}</h3>
-                <p className="text-sm text-muted-foreground">{busType.description}</p>
-                <div className="flex gap-2 mt-2">
-                  {busType.amenities.map((amenity, index) => (
-                    <Badge key={index} variant="secondary">{amenity}</Badge>
-                  ))}
-                </div>
-                <p className="text-sm mt-2">Total Seats: {busType.totalSeats}</p>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleEdit(busType)}
-                >
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => handleDelete(busType.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <ScrollArea className="h-[600px] pr-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {busTypes?.map((busType) => (
+              <Card key={busType.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                <CardHeader className="bg-primary/5">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">{busType.name}</CardTitle>
+                    <Badge variant="outline">{busType.totalSeats} seats</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <p className="text-sm text-muted-foreground mb-4">{busType.description}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {busType.amenities.map((amenity, index) => (
+                      <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                        {amenityIcons[amenity] || null}
+                        {amenity}
+                      </Badge>
+                    ))}
+                  </div>
+                  {busType.seatLayout && (
+                    <div className="mt-4">
+                      <p className="text-sm font-medium mb-2">Seat Layout</p>
+                      <div className="flex gap-2">
+                        <Badge variant="outline">
+                          {busType.seatLayout.rows} rows
+                        </Badge>
+                        <Badge variant="outline">
+                          {busType.seatLayout.columns} columns
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+                <CardFooter className="flex justify-end gap-2 bg-primary/5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEdit(busType)}
+                  >
+                    <Edit className="w-4 h-4 mr-1" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDelete(busType.id)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   );
