@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { busTypes, buses, routes, trips, users, bookings } from './schema.js';
-import { type Trip } from './schema.js';
+import { type Trip, type InsertBooking } from './schema.js';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
@@ -303,12 +303,16 @@ async function seed() {
     const insertedBuses = await db.insert(buses).values(busesData).returning();
     console.log('✅ Buses created successfully!');
 
-    // Generate trips for the next 5 months
+    // Generate trips for the next 3 months starting tomorrow
     const tripsToInsert = [];
-    const startDate = new Date(2025, 0, 1); // January 1st, 2025
-    const endDate = new Date(2025, 4, 31); // May 31st, 2025
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    
+    const endDate = new Date(tomorrow);
+    endDate.setMonth(endDate.getMonth() + 3);
 
-    for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+    for (let date = new Date(tomorrow); date <= endDate; date.setDate(date.getDate() + 1)) {
       const dateStr = date.toISOString().split('T')[0];
       const isPeak = date.getDay() === 5 || date.getDay() === 6 || date.getDay() === 0; // Friday, Saturday, Sunday
 
@@ -317,7 +321,7 @@ async function seed() {
         const routeBuses = insertedBuses.slice(i * 2, (i * 2) + 2); // Get the two buses assigned to this route
         const estimatedDuration = route.estimatedDuration || 0;
 
-        // Morning trip with first bus
+        // Morning trip with first bus (7 AM)
         tripsToInsert.push({
           routeId: route.id,
           busId: routeBuses[0].id,
@@ -331,13 +335,41 @@ async function seed() {
           status: 'scheduled'
         });
 
-        // Evening trip with second bus
+        // Mid-morning trip with second bus (10 AM)
+        tripsToInsert.push({
+          routeId: route.id,
+          busId: routeBuses[1].id,
+          departureTime: '10:00',
+          departureDate: dateStr,
+          arrivalTime: new Date(date.getTime() + estimatedDuration * 60000 + 10 * 3600000)
+            .toTimeString()
+            .slice(0, 5),
+          price: calculatePrice(route.distance || 0, routeBuses[1].busTypeId, isPeak),
+          availableSeats: busTypesData.find(bt => bt.id === routeBuses[1].busTypeId)?.totalSeats || 0,
+          status: 'scheduled'
+        });
+
+        // Afternoon trip with first bus (2 PM)
+        tripsToInsert.push({
+          routeId: route.id,
+          busId: routeBuses[0].id,
+          departureDate: dateStr,
+          departureTime: '14:00',
+          arrivalTime: new Date(date.getTime() + estimatedDuration * 60000 + 14 * 3600000)
+            .toTimeString()
+            .slice(0, 5),
+          price: calculatePrice(route.distance || 0, routeBuses[0].busTypeId, isPeak),
+          availableSeats: busTypesData.find(bt => bt.id === routeBuses[0].busTypeId)?.totalSeats || 0,
+          status: 'scheduled'
+        });
+
+        // Evening trip with second bus (5 PM)
         tripsToInsert.push({
           routeId: route.id,
           busId: routeBuses[1].id,
           departureDate: dateStr,
-          departureTime: '14:00',
-          arrivalTime: new Date(date.getTime() + estimatedDuration * 60000 + 14 * 3600000)
+          departureTime: '17:00',
+          arrivalTime: new Date(date.getTime() + estimatedDuration * 60000 + 17 * 3600000)
             .toTimeString()
             .slice(0, 5),
           price: calculatePrice(route.distance || 0, routeBuses[1].busTypeId, isPeak),
@@ -347,43 +379,40 @@ async function seed() {
       }
     }
 
-    // Insert trips in batches to avoid memory issues
-    const batchSize = 100;
-    let insertedTrips: Trip[] = [];
-    for (let i = 0; i < tripsToInsert.length; i += batchSize) {
-      const batch = tripsToInsert.slice(i, i + batchSize);
-      const batchResult = await db.insert(trips).values(batch).returning();
-      insertedTrips = insertedTrips.concat(batchResult);
-      console.log(`Inserted trips batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(tripsToInsert.length / batchSize)}`);
+    // Insert all trips in batches
+    const BATCH_SIZE = 100;
+    const insertedTrips = [];
+    for (let i = 0; i < tripsToInsert.length; i += BATCH_SIZE) {
+      const batch = tripsToInsert.slice(i, i + BATCH_SIZE);
+      const result = await db.insert(trips).values(batch).returning();
+      insertedTrips.push(...result);
     }
 
-    console.log('✅ Trips created successfully!');
-    console.log(`Total trips created: ${tripsToInsert.length}`);
+    console.log(`✅ Created ${tripsToInsert.length} trips for the next 3 months`);
 
     // Create sample bookings with various statuses
     const bookingStatuses = ['confirmed', 'cancelled', 'completed', 'pending'];
-    const sampleBookings = [];
 
     // Generate some historical bookings for analytics
     for (let i = 0; i < 50; i++) {
       const tripIndex = Math.floor(Math.random() * insertedTrips.length);
       const trip = insertedTrips[tripIndex];
       const status = bookingStatuses[Math.floor(Math.random() * bookingStatuses.length)];
+      const historicalDate = new Date();
+      historicalDate.setDate(historicalDate.getDate() - Math.floor(Math.random() * 30));
 
-      sampleBookings.push({
+      const booking: InsertBooking = {
         userId: regularUser.id,
         tripId: trip.id,
-        bookingReference: `LB${Date.now().toString().slice(-6)}${i.toString().padStart(3, '0')}`,
-        seatNumbers: ['1', '2'],
+        seatNumber: Math.floor(Math.random() * 30) + 1,
+        bookingReference: `BK${Math.floor(10000 + Math.random() * 90000)}`,
+        paymentStatus: status === 'confirmed' ? 'completed' : 'pending',
         totalAmount: trip.price,
-        paymentStatus: status === 'confirmed' || status === 'completed' ? 'paid' : 'pending',
-        bookingStatus: status,
-        paymentMethod: status === 'confirmed' || status === 'completed' ? 'card' : null,
-        transactionId: status === 'confirmed' || status === 'completed' ? uuidv4() : null,
-      });
-    }
+        createdAt: historicalDate
+      };
 
-    await db.insert(bookings).values(sampleBookings);
+      await db.insert(bookings).values(booking);
+    }
 
     console.log('✅ Sample bookings created successfully!');
     console.log('✅ Database seeded successfully!');
@@ -391,6 +420,57 @@ async function seed() {
     // Print admin credentials
     console.log('\nAdmin Credentials:');
     console.log('Admin - Email: admin@linkbus.com, Password: admin123');
+
+    // Add trips for today and upcoming dates
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+
+    // Format dates for SQL
+    const todayStr = today.toISOString().split('T')[0];
+    const nextWeekStr = nextWeek.toISOString().split('T')[0];
+
+    // Get buses for Kampala to Mbarara route (first route)
+    const routeBuses = insertedBuses.slice(0, 2); // Get the two buses assigned to this route
+
+    // Add trips for Kampala to Mbarara route
+    await db.insert(trips).values([
+      // Morning trip
+      {
+        routeId: routesData[0].id,
+        busId: routeBuses[0].id,
+        departureDate: todayStr,
+        departureTime: '07:00',
+        arrivalTime: '12:00',
+        price: calculatePrice(266, routeBuses[0].busTypeId),
+        availableSeats: busTypesData.find(bt => bt.id === routeBuses[0].busTypeId)?.totalSeats || 0,
+        status: 'scheduled'
+      },
+      // Afternoon trip
+      {
+        routeId: routesData[0].id,
+        busId: routeBuses[1].id,
+        departureDate: todayStr,
+        departureTime: '14:00',
+        arrivalTime: '19:00',
+        price: calculatePrice(266, routeBuses[1].busTypeId),
+        availableSeats: busTypesData.find(bt => bt.id === routeBuses[1].busTypeId)?.totalSeats || 0,
+        status: 'scheduled'
+      },
+      // Next week morning trip
+      {
+        routeId: routesData[0].id,
+        busId: routeBuses[0].id,
+        departureDate: nextWeekStr,
+        departureTime: '07:00',
+        arrivalTime: '12:00',
+        price: calculatePrice(266, routeBuses[0].busTypeId),
+        availableSeats: busTypesData.find(bt => bt.id === routeBuses[0].busTypeId)?.totalSeats || 0,
+        status: 'scheduled'
+      }
+    ]);
+
+    console.log('✅ Added trips for Kampala to Mbarara route');
 
   } catch (error) {
     console.error('Error seeding database:', error);

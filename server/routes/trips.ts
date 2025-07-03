@@ -91,35 +91,42 @@ router.get('/search', auth, async (req, res) => {
       if (isNaN(searchDate.getTime())) {
         return res.status(400).json({ message: 'Invalid date format' });
       }
+
+      // Ensure the search date is not in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (searchDate < today) {
+        return res.status(400).json({ message: 'Cannot search for trips in the past' });
+      }
+
       const formattedDate = searchDate.toISOString().split('T')[0];
 
-      let baseQuery = db
+      let conditions = [
+        sql`LOWER(${routes.origin}) = LOWER(${origin as string})`,
+        sql`LOWER(${routes.destination}) = LOWER(${destination as string})`,
+        eq(trips.departureDate, formattedDate),
+        eq(trips.status, 'scheduled'),
+        sql`CONCAT(${trips.departureDate}, ' ', ${trips.departureTime}) > NOW()`
+      ];
+
+      if (minPrice) {
+        conditions.push(gte(trips.price, minPrice as string));
+      }
+      if (maxPrice) {
+        conditions.push(sql`CAST(${trips.price} AS DECIMAL) <= ${maxPrice}`);
+      }
+      if (busType) {
+        conditions.push(eq(busTypes.name, busType as string));
+      }
+
+      const baseQuery = db
         .select()
         .from(trips)
         .innerJoin(routes, eq(trips.routeId, routes.id))
         .innerJoin(buses, eq(trips.busId, buses.id))
         .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-        .where(
-          and(
-            sql`LOWER(${routes.origin}) = LOWER(${origin as string})`,
-            sql`LOWER(${routes.destination}) = LOWER(${destination as string})`,
-            eq(trips.departureDate, formattedDate),
-            eq(trips.status, 'scheduled')
-          )
-        );
-
-      // Add price range filter if provided
-      if (minPrice) {
-        baseQuery = baseQuery.where(gte(trips.price, minPrice as string));
-      }
-      if (maxPrice) {
-        baseQuery = baseQuery.where(sql`CAST(${trips.price} AS DECIMAL) <= ${maxPrice}`);
-      }
-
-      // Add bus type filter if provided
-      if (busType) {
-        baseQuery = baseQuery.where(eq(busTypes.name, busType as string));
-      }
+        .where(and(...conditions));
 
       const results = await baseQuery;
       const searchResults = results.map(formatTripResult);
