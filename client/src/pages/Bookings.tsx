@@ -15,28 +15,56 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 
 interface Booking {
   id: number;
   bookingReference: string;
-  tripId: number;
   seatNumber: number;
   paymentStatus: string;
   totalAmount: string;
   createdAt: string;
   trip: {
+    id: number;
     departureDate: string;
     departureTime: string;
     arrivalTime: string;
     route: {
       origin: string;
       destination: string;
+      distance: number;
+      estimatedDuration: number;
     };
     bus: {
       busNumber: string;
       busType: {
         name: string;
+        amenities: string[];
       };
+    };
+  };
+}
+
+interface Trip {
+  id: number;
+  departureDate: string;
+  departureTime: string;
+  arrivalTime: string;
+  price: string;
+  availableSeats: number;
+  route: {
+    origin: string;
+    destination: string;
+    distance: number;
+    estimatedDuration: number;
+  };
+  bus: {
+    busNumber: string;
+    busType: {
+      name: string;
+      amenities: string[];
+      totalSeats: number;
     };
   };
 }
@@ -47,88 +75,141 @@ export default function Bookings() {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const tripId = searchParams.get('tripId');
+  const navigate = useNavigate();
+  const [selectedSeats, setSelectedSeats] = useState(1);
 
-  const fetchBookings = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const { data: bookingsData, isLoading, error: queryError } = useQuery<Booking[]>({
+    queryKey: ['bookings'],
+    queryFn: async () => {
       const token = getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
       const response = await fetch('http://localhost:5000/api/bookings/my-bookings', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`
         },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to fetch bookings');
+      }
+
+      return response.json();
+    },
+    enabled: !!user
+  });
+
+  // Fetch trip details
+  const { data: trip, isLoading: tripLoading, error: tripError } = useQuery<Trip>({
+    queryKey: ['trip', tripId],
+    queryFn: async () => {
+      const response = await fetch(`http://localhost:5000/api/trips/${tripId}`, {
+        credentials: 'include'
       });
       if (!response.ok) {
-        throw new Error('Failed to fetch bookings');
+        throw new Error('Failed to fetch trip details');
       }
-      const data = await response.json();
-      setBookings(data);
-    } catch (error) {
-      console.error('Error fetching bookings:', error);
-      setError('Failed to load bookings. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return response.json();
+    },
+    enabled: !!tripId
+  });
 
   useEffect(() => {
-    if (user) {
-      fetchBookings();
-    }
-  }, [user]);
-
-  const handleCancelBooking = async (bookingId: number) => {
-    try {
-      const token = getToken();
-      const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/cancel`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to cancel booking');
-      }
-
+    if (!user) {
       toast({
-        title: "Booking Cancelled",
-        description: "Your booking has been successfully cancelled.",
+        title: "Login Required",
+        description: "Please login to book a trip",
+        variant: "destructive"
       });
-
-      // Refresh bookings list
-      fetchBookings();
-    } catch (error) {
-      console.error('Error cancelling booking:', error);
-      toast({
-        title: "Error",
-        description: "Failed to cancel booking. Please try again.",
-        variant: "destructive",
-      });
+      navigate('/login');
     }
-  };
+  }, [user, navigate, toast]);
 
   if (!user) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Please Login</h1>
-          <p className="text-gray-600">You need to be logged in to view your bookings.</p>
+      <div className="container mx-auto py-8">
+        <Card className="p-6 text-center">
+          <h2 className="text-xl font-semibold mb-4">Login Required</h2>
+          <p className="mb-4">Please login to view your bookings.</p>
+          <Button onClick={() => navigate('/login')}>
+            Login
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">Loading your bookings...</div>
+      </div>
+    );
+  }
+
+  if (queryError) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-red-500 text-center">
+          Error loading bookings: {queryError instanceof Error ? queryError.message : 'Unknown error'}
         </div>
       </div>
     );
   }
 
-  if (loading) {
+  if (tripId && tripError) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-          <p className="text-lg">Loading bookings...</p>
+      <div className="container mx-auto py-8">
+        <div className="text-red-500 text-center">
+          Error loading trip details. Please try again.
         </div>
       </div>
     );
   }
+
+  const handleBooking = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          tripId: trip.id,
+          numberOfSeats: selectedSeats,
+          totalAmount: (parseInt(trip.price) * selectedSeats).toString()
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create booking');
+      }
+
+      const booking = await response.json();
+      toast({
+        title: "Booking Successful",
+        description: `Your booking reference is: ${booking.bookingReference}`,
+      });
+      navigate('/bookings');
+    } catch (error) {
+      toast({
+        title: "Booking Failed",
+        description: error instanceof Error ? error.message : "Failed to create booking",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCancelBooking = async (bookingId: number) => {
+    // ... existing code ...
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -143,88 +224,179 @@ export default function Bookings() {
         </div>
       )}
 
-      {bookings.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-gray-600">You don't have any bookings yet.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {bookings.map((booking) => (
-            <Card key={booking.id}>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Booking #{booking.bookingReference}</span>
-                  <span className={`text-sm px-2 py-1 rounded ${
-                    booking.paymentStatus === 'completed' 
-                      ? 'bg-green-100 text-green-800' 
-                      : booking.paymentStatus === 'pending'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : booking.paymentStatus === 'cancelled'
-                      ? 'bg-gray-100 text-gray-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {(booking.paymentStatus || 'unknown').charAt(0).toUpperCase() + (booking.paymentStatus || 'unknown').slice(1)}
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+      {(!bookingsData || bookingsData.length === 0) && (
+        <Card className="p-6 text-center">
+          <p className="text-gray-500">You don't have any bookings yet.</p>
+          <Button className="mt-4" onClick={() => navigate('/trips')}>
+            Book a Trip
+          </Button>
+        </Card>
+      )}
+
+      <div className="space-y-4">
+        {bookingsData?.map((booking) => (
+          <Card key={booking.id} className="p-6">
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <div className="flex justify-between items-start mb-4">
                   <div>
-                    <p className="text-sm text-gray-500">Route</p>
-                    <p className="font-medium">{booking.trip.route.origin} → {booking.trip.route.destination}</p>
+                    <h3 className="text-lg font-semibold">
+                      {booking.trip.route.origin} → {booking.trip.route.destination}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {new Date(booking.trip.departureDate).toLocaleDateString()}
+                    </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Date</p>
-                      <p className="font-medium">{new Date(booking.trip.departureDate).toLocaleDateString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Time</p>
-                      <p className="font-medium">{booking.trip.departureTime} - {booking.trip.arrivalTime}</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Bus</p>
-                      <p className="font-medium">{booking.trip.bus.busType.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Seat</p>
-                      <p className="font-medium">#{booking.seatNumber}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Amount</p>
-                    <p className="font-medium">UGX {parseInt(booking.totalAmount).toLocaleString()}</p>
+                  <div className="text-right">
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm ${
+                      booking.paymentStatus === 'completed' ? 'bg-green-100 text-green-800' :
+                      booking.paymentStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
+                    </span>
                   </div>
                 </div>
-              </CardContent>
-              {['pending', 'completed'].includes(booking.paymentStatus) && (
-                <CardFooter className="flex justify-end pt-4">
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive">Cancel Booking</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to cancel this booking? This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Keep Booking</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleCancelBooking(booking.id)}>
-                          Yes, Cancel Booking
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </CardFooter>
-              )}
-            </Card>
-          ))}
-        </div>
+
+                <div className="space-y-2">
+                  <p>
+                    <span className="font-medium">Booking Reference: </span>
+                    {booking.bookingReference}
+                  </p>
+                  <p>
+                    <span className="font-medium">Seat Number: </span>
+                    {booking.seatNumber}
+                  </p>
+                  <p>
+                    <span className="font-medium">Bus: </span>
+                    {booking.trip.bus.busType.name} ({booking.trip.bus.busNumber})
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <div className="space-y-2">
+                  <p>
+                    <span className="font-medium">Departure: </span>
+                    {booking.trip.departureTime}
+                  </p>
+                  <p>
+                    <span className="font-medium">Arrival: </span>
+                    {booking.trip.arrivalTime}
+                  </p>
+                  <p>
+                    <span className="font-medium">Amount: </span>
+                    UGX {parseInt(booking.totalAmount).toLocaleString()}
+                  </p>
+                  <p>
+                    <span className="font-medium">Booked on: </span>
+                    {new Date(booking.createdAt).toLocaleString()}
+                  </p>
+                </div>
+
+                {booking.paymentStatus === 'pending' && (
+                  <div className="mt-4 space-x-2">
+                    <Button variant="destructive" onClick={() => handleCancelBooking(booking.id)}>
+                      Cancel Booking
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {tripId && trip && (
+        <>
+          <Card className="p-6 mt-6">
+            <h2 className="text-xl font-semibold mb-4">Book Your Trip</h2>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Trip Details</h3>
+                <div className="space-y-2">
+                  <p>
+                    <span className="font-medium">Route: </span>
+                    {trip.route.origin} → {trip.route.destination}
+                  </p>
+                  <p>
+                    <span className="font-medium">Date: </span>
+                    {new Date(trip.departureDate).toLocaleDateString()}
+                  </p>
+                  <p>
+                    <span className="font-medium">Departure: </span>
+                    {trip.departureTime}
+                  </p>
+                  <p>
+                    <span className="font-medium">Arrival: </span>
+                    {trip.arrivalTime}
+                  </p>
+                  <p>
+                    <span className="font-medium">Bus Type: </span>
+                    {trip.bus.busType.name}
+                  </p>
+                  <p>
+                    <span className="font-medium">Bus Number: </span>
+                    {trip.bus.busNumber}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Booking Details</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Number of Seats
+                    </label>
+                    <select
+                      className="w-full p-2 border rounded-md"
+                      value={selectedSeats}
+                      onChange={(e) => setSelectedSeats(parseInt(e.target.value))}
+                    >
+                      {[...Array(Math.min(5, trip.availableSeats))].map((_, i) => (
+                        <option key={i + 1} value={i + 1}>
+                          {i + 1} {i === 0 ? 'seat' : 'seats'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <p className="text-lg font-medium">
+                      Price per seat: UGX {parseInt(trip.price).toLocaleString()}
+                    </p>
+                    <p className="text-xl font-bold mt-2">
+                      Total: UGX {(parseInt(trip.price) * selectedSeats).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <Button 
+                    className="w-full mt-4" 
+                    onClick={handleBooking}
+                    disabled={trip.availableSeats < 1}
+                  >
+                    {trip.availableSeats < 1 ? 'No Seats Available' : 'Confirm Booking'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6 mt-6">
+            <h2 className="text-xl font-semibold mb-4">Bus Features</h2>
+            <div className="flex flex-wrap gap-2">
+              {trip.bus.busType.amenities?.map((amenity, index) => (
+                <span
+                  key={index}
+                  className="text-sm bg-gray-100 text-gray-600 px-3 py-1 rounded-full"
+                >
+                  {amenity}
+                </span>
+              ))}
+            </div>
+          </Card>
+        </>
       )}
     </div>
   );

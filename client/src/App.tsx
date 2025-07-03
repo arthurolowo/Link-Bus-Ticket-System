@@ -13,6 +13,8 @@ import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import Support from './pages/Support';
 import NotFound from './pages/not-found';
+import NewBooking from './pages/NewBooking';
+import Bookings from './pages/Bookings';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './hooks/useAuth';
 
@@ -30,6 +32,12 @@ function App() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/routes" element={<RoutesPage />} />
                 <Route path="/trips" element={<TripsPage />} />
+                <Route path="/bookings" element={
+                  <ProtectedRoute>
+                    <Bookings />
+                  </ProtectedRoute>
+                } />
+                <Route path="/bookings/new" element={<NewBooking />} />
                 <Route path="/support" element={<Support />} />
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route
