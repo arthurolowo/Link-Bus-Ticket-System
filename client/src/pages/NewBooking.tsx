@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { useToast } from '../hooks/use-toast';
 import { useAuth } from '../hooks/useAuth';
 import { getToken } from '../lib/authUtils';
+import PaymentForm from '../components/PaymentForm';
 
 interface Trip {
   id: number;
@@ -37,6 +38,8 @@ export default function NewBooking() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
+  const [bookingId, setBookingId] = useState<number | null>(null);
+  const [showPayment, setShowPayment] = useState(false);
 
   // Fetch trip details
   const { data: trip, isLoading, error } = useQuery<Trip>({
@@ -109,6 +112,9 @@ export default function NewBooking() {
         return;
       }
 
+      // Format totalAmount to match the required format (e.g., "1000.00")
+      const formattedAmount = Number(trip.price).toFixed(2);
+
       const response = await fetch('http://localhost:5000/api/bookings', {
         method: 'POST',
         headers: {
@@ -119,7 +125,7 @@ export default function NewBooking() {
         body: JSON.stringify({
           tripId: trip.id,
           seatNumber: selectedSeat,
-          totalAmount: trip.price
+          totalAmount: formattedAmount
         }),
       });
 
@@ -129,11 +135,13 @@ export default function NewBooking() {
       }
 
       const booking = await response.json();
+      setBookingId(booking.id);
+      setShowPayment(true);
+      
       toast({
-        title: "Booking Successful",
-        description: `Your booking reference is: ${booking.bookingReference}`,
+        title: "Booking Created",
+        description: `Please complete the payment to confirm your booking.`,
       });
-      navigate('/bookings');
     } catch (error) {
       toast({
         title: "Booking Failed",
@@ -143,86 +151,102 @@ export default function NewBooking() {
     }
   };
 
-  // Generate available seat numbers
-  const availableSeats = Array.from(
-    { length: Math.min(trip.availableSeats, trip.bus.busType.totalSeats) },
-    (_, i) => i + 1
-  );
+  const handlePaymentSuccess = () => {
+    toast({
+      title: "Booking Confirmed",
+      description: "Your payment was successful and your booking is confirmed.",
+    });
+    navigate('/bookings');
+  };
+
+  const handlePaymentCancel = () => {
+    setShowPayment(false);
+    setBookingId(null);
+  };
 
   return (
     <div className="container mx-auto py-8">
       <h1 className="text-3xl font-bold mb-6">Book Your Trip</h1>
       
-      <Card className="p-6 mb-6">
-        <div className="grid gap-6 md:grid-cols-2">
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Trip Details</h2>
-            <div className="space-y-2">
-              <p>
-                <span className="font-medium">Route: </span>
-                {trip.route.origin} → {trip.route.destination}
-              </p>
-              <p>
-                <span className="font-medium">Date: </span>
-                {new Date(trip.departureDate).toLocaleDateString()}
-              </p>
-              <p>
-                <span className="font-medium">Departure: </span>
-                {trip.departureTime}
-              </p>
-              <p>
-                <span className="font-medium">Arrival: </span>
-                {trip.arrivalTime}
-              </p>
-              <p>
-                <span className="font-medium">Bus Type: </span>
-                {trip.bus.busType.name}
-              </p>
-              <p>
-                <span className="font-medium">Bus Number: </span>
-                {trip.bus.busNumber}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Booking Details</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Select Seat Number
-                </label>
-                <select
-                  className="w-full p-2 border rounded-md"
-                  value={selectedSeat || ''}
-                  onChange={(e) => setSelectedSeat(parseInt(e.target.value))}
-                >
-                  <option value="">Choose a seat</option>
-                  {availableSeats.map((seat) => (
-                    <option key={seat} value={seat}>
-                      Seat {seat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <p className="text-lg font-medium">
-                  Price: UGX {parseInt(trip.price).toLocaleString()}
+      {showPayment && bookingId ? (
+        <PaymentForm
+          bookingId={bookingId}
+          amount={trip.price}
+          onPaymentComplete={handlePaymentSuccess}
+          onPaymentError={handlePaymentCancel}
+        />
+      ) : (
+        <Card className="p-6 mb-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Trip Details</h2>
+              <div className="space-y-2">
+                <p>
+                  <span className="font-medium">Route: </span>
+                  {trip.route.origin} → {trip.route.destination}
+                </p>
+                <p>
+                  <span className="font-medium">Date: </span>
+                  {new Date(trip.departureDate).toLocaleDateString()}
+                </p>
+                <p>
+                  <span className="font-medium">Departure: </span>
+                  {trip.departureTime}
+                </p>
+                <p>
+                  <span className="font-medium">Arrival: </span>
+                  {trip.arrivalTime}
+                </p>
+                <p>
+                  <span className="font-medium">Bus Type: </span>
+                  {trip.bus.busType.name}
+                </p>
+                <p>
+                  <span className="font-medium">Bus Number: </span>
+                  {trip.bus.busNumber}
                 </p>
               </div>
+            </div>
 
-              <Button 
-                className="w-full mt-4" 
-                onClick={handleBooking}
-                disabled={!selectedSeat || trip.availableSeats < 1}
-              >
-                {trip.availableSeats < 1 ? 'No Seats Available' : 'Confirm Booking'}
-              </Button>
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Booking Details</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Select Seat Number
+                  </label>
+                  <select
+                    className="w-full p-2 border rounded-md"
+                    value={selectedSeat || ''}
+                    onChange={(e) => setSelectedSeat(parseInt(e.target.value))}
+                  >
+                    <option value="">Choose a seat</option>
+                    {Array.from({ length: trip.availableSeats }, (_, i) => (
+                      <option key={i + 1} value={i + 1}>
+                        Seat {i + 1}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <p className="text-lg font-medium">
+                    Price: UGX {parseInt(trip.price).toLocaleString()}
+                  </p>
+                </div>
+
+                <Button 
+                  className="w-full" 
+                  onClick={handleBooking}
+                  disabled={!selectedSeat}
+                >
+                  Proceed to Payment
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       <Card className="p-6">
         <h2 className="text-xl font-semibold mb-4">Bus Features</h2>

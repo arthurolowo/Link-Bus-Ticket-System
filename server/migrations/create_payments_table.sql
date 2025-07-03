@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS payments (
+  id VARCHAR(36) PRIMARY KEY,
+  booking_id INT NOT NULL,
+  amount VARCHAR(255) NOT NULL,
+  payment_method VARCHAR(50) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  external_reference VARCHAR(50),
+  phone_number VARCHAR(20),
+  payment_details TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
+); 

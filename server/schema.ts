@@ -1,6 +1,8 @@
 import { pgTable, serial, varchar, integer, jsonb, date, time, text, boolean as pgBoolean, timestamp } from 'drizzle-orm/pg-core';
 import { InferModel } from 'drizzle-orm';
 import { z } from 'zod';
+import { relations, sql } from 'drizzle-orm';
+import { mysqlTable, int } from 'drizzle-orm/mysql-core';
 
 // USERS TABLE
 export const users = pgTable('users', {
@@ -164,3 +166,23 @@ export const bookingSchema = z.object({
   totalAmount: z.string().regex(/^\d+(\.\d{2})?$/),
   paymentStatus: z.enum(['pending', 'completed', 'failed', 'cancelled']).optional(),
 });
+
+export const payments = mysqlTable('payments', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  bookingId: int('booking_id').notNull(),
+  amount: varchar('amount', { length: 255 }).notNull(),
+  paymentMethod: varchar('payment_method', { length: 50 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  externalReference: varchar('external_reference', { length: 50 }),
+  phoneNumber: varchar('phone_number', { length: 20 }),
+  paymentDetails: text('payment_details'),
+  createdAt: timestamp('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updated_at').default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+});
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [payments.bookingId],
+    references: [bookings.id],
+  }),
+}));

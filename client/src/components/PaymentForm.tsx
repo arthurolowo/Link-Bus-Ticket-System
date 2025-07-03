@@ -1,393 +1,199 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useToast } from "../hooks/use-toast";
-import { ArrowLeft, CreditCard, Smartphone, Building2, Lock } from "lucide-react";
-import DigitalTicket from "./DigitalTicket";
-import { SeatSelection } from "../types";
-import type { TripWithDetails } from "../types";
+import { getToken } from '../lib/authUtils';
 
 interface PaymentFormProps {
-  trip: TripWithDetails;
-  seatSelection: SeatSelection;
-  totalAmount: number;
-  onBack: () => void;
+  bookingId: number;
+  amount: string;
+  onPaymentComplete: () => void;
+  onPaymentError: () => void;
 }
 
-export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }: PaymentFormProps) {
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'mobile_money' | 'bank_transfer'>('card');
-  const [cardDetails, setCardDetails] = useState({
-    number: "",
-    expiry: "",
-    cvv: "",
-    name: "",
-  });
-  const [mobileDetails, setMobileDetails] = useState({
-    provider: 'mtn' as 'mtn' | 'airtel',
-    number: "",
-  });
-  const [showTicket, setShowTicket] = useState(false);
-  const [bookingId, setBookingId] = useState<number | null>(null);
-
+export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPaymentError }: PaymentFormProps) {
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const createBookingMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch('/api/bookings', {
+  const initiatePayment = async () => {
+    if (!phoneNumber) {
+      toast({
+        title: "Invalid Phone Number",
+        description: "Please enter your mobile money number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const token = getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('http://localhost:5000/api/payments/initiate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
+        credentials: 'include',
         body: JSON.stringify({
-          tripId: trip.id,
-          seatNumber: seatSelection.selectedSeats[0], // For now, handle single seat
-          totalAmount: totalAmount.toString(),
+          bookingId,
+          amount,
+          paymentMethod: 'mobile_money',
+          phoneNumber
         }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to create booking');
+        throw new Error(error.message || 'Payment initiation failed');
       }
 
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setBookingId(data.id);
-      // Process payment
-      processPaymentMutation.mutate(data.id);
-    },
-    onError: (error: unknown) => {
+      const data = await response.json();
+      setPaymentId(data.paymentId);
+      
       toast({
-        title: "Booking Failed",
-        description: error instanceof Error ? error.message : "Failed to create booking",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const processPaymentMutation = useMutation({
-    mutationFn: async (bookingId: number) => {
-      const response = await fetch(`/api/bookings/${bookingId}/payment`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          paymentStatus: 'completed',
-          paymentMethod,
-          ...(paymentMethod === 'card' ? { cardDetails } : {}),
-          ...(paymentMethod === 'mobile_money' ? { mobileDetails } : {}),
-        }),
+        title: "Payment Initiated",
+        description: "Please check your phone for the payment prompt.",
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Payment failed');
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Successful",
-        description: "Your ticket has been confirmed!",
-      });
-      setShowTicket(true);
-    },
-    onError: (error: unknown) => {
+      // Start polling payment status
+      pollPaymentStatus(data.paymentId);
+    } catch (error) {
+      console.error('Payment error:', error);
       toast({
         title: "Payment Failed",
-        description: error instanceof Error ? error.message : "Payment processing failed",
-        variant: "destructive",
+        description: error instanceof Error ? error.message : "Failed to process payment",
+        variant: "destructive"
       });
-    },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validate payment details based on method
-    if (paymentMethod === 'card') {
-      if (!cardDetails.number || !cardDetails.expiry || !cardDetails.cvv || !cardDetails.name) {
-        toast({
-          title: "Invalid Card Details",
-          description: "Please fill in all card details",
-          variant: "destructive",
-        });
-        return;
-      }
-    } else if (paymentMethod === 'mobile_money') {
-      if (!mobileDetails.number) {
-        toast({
-          title: "Invalid Mobile Number",
-          description: "Please enter your mobile money number",
-          variant: "destructive",
-        });
-        return;
-      }
+      onPaymentError();
+    } finally {
+      setLoading(false);
     }
-
-    createBookingMutation.mutate();
   };
 
-  if (showTicket && bookingId) {
-    return (
-      <DigitalTicket
-        bookingId={bookingId}
-        onNewBooking={() => {
-          setShowTicket(false);
-          setBookingId(null);
-          onBack();
-        }}
-      />
-    );
-  }
+  const pollPaymentStatus = async (pid: string) => {
+    const token = getToken();
+    if (!token) {
+      onPaymentError();
+      return;
+    }
+
+    const maxAttempts = 20; // Poll for up to 2 minutes (6 seconds * 20)
+    let attempts = 0;
+
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/payments/${pid}/status`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to check payment status');
+        }
+
+        const data = await response.json();
+        
+        if (data.status === 'completed') {
+          toast({
+            title: "Payment Successful",
+            description: "Your payment has been processed successfully.",
+          });
+          onPaymentComplete();
+          return;
+        } else if (data.status === 'failed') {
+          toast({
+            title: "Payment Failed",
+            description: "The payment could not be processed. Please try again.",
+            variant: "destructive"
+          });
+          onPaymentError();
+          return;
+        }
+
+        // Continue polling if payment is still pending
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(checkStatus, 6000); // Check every 6 seconds
+        } else {
+          toast({
+            title: "Payment Timeout",
+            description: "The payment is taking longer than expected. Please check your booking status later.",
+            variant: "destructive"
+          });
+          onPaymentError();
+        }
+      } catch (error) {
+        console.error('Payment status check error:', error);
+        toast({
+          title: "Error",
+          description: "Failed to check payment status",
+          variant: "destructive"
+        });
+        onPaymentError();
+      }
+    };
+
+    checkStatus();
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Seats
-        </Button>
-        <div>
-          <h2 className="text-2xl font-bold">Payment Details</h2>
-          <p className="text-muted-foreground">Secure payment processing</p>
-        </div>
+    <div className="max-w-md mx-auto space-y-6 p-6 bg-white rounded-lg shadow-md">
+      <div className="text-center">
+        <h2 className="text-2xl font-bold mb-2">Mobile Money Payment</h2>
+        <p className="text-gray-600">Amount to pay: UGX {Number(amount).toLocaleString()}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Payment Form */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lock className="w-5 h-5" />
-                Payment Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Payment Methods */}
-                <div>
-                  <Label className="text-base font-medium mb-4 block">Select Payment Method</Label>
-                  <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as typeof paymentMethod)}>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <label className="relative cursor-pointer">
-                        <RadioGroupItem value="card" className="sr-only" />
-                        <div className={`border-2 rounded-lg p-4 text-center transition-colors ${
-                          paymentMethod === 'card' 
-                            ? 'border-primary bg-primary/5' 
-                            : 'border-border hover:border-primary/50'
-                        }`}>
-                          <CreditCard className={`w-8 h-8 mx-auto mb-2 ${
-                            paymentMethod === 'card' ? 'text-primary' : 'text-muted-foreground'
-                          }`} />
-                          <p className={`font-medium ${
-                            paymentMethod === 'card' ? 'text-primary' : 'text-foreground'
-                          }`}>
-                            Credit/Debit Card
-                          </p>
-                          <p className="text-sm text-muted-foreground">Visa, Mastercard</p>
-                        </div>
-                      </label>
-
-                      <label className="relative cursor-pointer">
-                        <RadioGroupItem value="mobile_money" className="sr-only" />
-                        <div className={`border-2 rounded-lg p-4 text-center transition-colors ${
-                          paymentMethod === 'mobile_money' 
-                            ? 'border-primary bg-primary/5' 
-                            : 'border-border hover:border-primary/50'
-                        }`}>
-                          <Smartphone className={`w-8 h-8 mx-auto mb-2 ${
-                            paymentMethod === 'mobile_money' ? 'text-primary' : 'text-muted-foreground'
-                          }`} />
-                          <p className={`font-medium ${
-                            paymentMethod === 'mobile_money' ? 'text-primary' : 'text-foreground'
-                          }`}>
-                            Mobile Money
-                          </p>
-                          <p className="text-sm text-muted-foreground">MTN, Airtel</p>
-                        </div>
-                      </label>
-
-                      <label className="relative cursor-pointer">
-                        <RadioGroupItem value="bank_transfer" className="sr-only" />
-                        <div className={`border-2 rounded-lg p-4 text-center transition-colors ${
-                          paymentMethod === 'bank_transfer' 
-                            ? 'border-primary bg-primary/5' 
-                            : 'border-border hover:border-primary/50'
-                        }`}>
-                          <Building2 className={`w-8 h-8 mx-auto mb-2 ${
-                            paymentMethod === 'bank_transfer' ? 'text-primary' : 'text-muted-foreground'
-                          }`} />
-                          <p className={`font-medium ${
-                            paymentMethod === 'bank_transfer' ? 'text-primary' : 'text-foreground'
-                          }`}>
-                            Bank Transfer
-                          </p>
-                          <p className="text-sm text-muted-foreground">Direct transfer</p>
-                        </div>
-                      </label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                {/* Payment Method Forms */}
-                {paymentMethod === 'card' && (
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input
-                        id="cardNumber"
-                        placeholder="1234 5678 9012 3456"
-                        value={cardDetails.number}
-                        onChange={(e) => setCardDetails(prev => ({ ...prev, number: e.target.value }))}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="expiry">Expiry Date</Label>
-                        <Input
-                          id="expiry"
-                          placeholder="MM/YY"
-                          value={cardDetails.expiry}
-                          onChange={(e) => setCardDetails(prev => ({ ...prev, expiry: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="cvv">CVV</Label>
-                        <Input
-                          id="cvv"
-                          placeholder="123"
-                          value={cardDetails.cvv}
-                          onChange={(e) => setCardDetails(prev => ({ ...prev, cvv: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="cardName">Name on Card</Label>
-                      <Input
-                        id="cardName"
-                        placeholder="John Doe"
-                        value={cardDetails.name}
-                        onChange={(e) => setCardDetails(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {paymentMethod === 'mobile_money' && (
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="provider">Mobile Money Provider</Label>
-                      <Select
-                        value={mobileDetails.provider}
-                        onValueChange={(value) => setMobileDetails(prev => ({ ...prev, provider: value as 'mtn' | 'airtel' }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select provider" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="mtn">MTN Mobile Money</SelectItem>
-                          <SelectItem value="airtel">Airtel Money</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="mobileNumber">Mobile Money Number</Label>
-                      <Input
-                        id="mobileNumber"
-                        placeholder="07XX XXX XXX"
-                        value={mobileDetails.number}
-                        onChange={(e) => setMobileDetails(prev => ({ ...prev, number: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {paymentMethod === 'bank_transfer' && (
-                  <div className="space-y-4">
-                    <div className="bg-muted p-4 rounded-lg">
-                      <p className="font-medium mb-2">Bank Account Details</p>
-                      <div className="space-y-2 text-sm">
-                        <p>Bank: Link Bus Bank</p>
-                        <p>Account Name: Link Bus Services Ltd</p>
-                        <p>Account Number: 1234567890</p>
-                        <p>Branch: Main Branch</p>
-                        <p>Reference: TRIP-{trip.id}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Order Summary */}
-                <div className="border-t pt-4 mt-6">
-                  <div className="flex justify-between items-center text-lg font-medium">
-                    <span>Total Amount</span>
-                    <span>UGX {totalAmount.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                {/* Submit Button */}
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={createBookingMutation.isPending || processPaymentMutation.isPending}
-                >
-                  {createBookingMutation.isPending || processPaymentMutation.isPending
-                    ? "Processing..."
-                    : `Pay UGX ${totalAmount.toLocaleString()}`}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="phoneNumber">Mobile Money Number</Label>
+          <Input
+            id="phoneNumber"
+            type="tel"
+            placeholder="Enter your phone number (e.g., 256771234567)"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            disabled={loading || !!paymentId}
+          />
+          <p className="text-sm text-gray-500">
+            Enter your phone number in international format (e.g., 256771234567)
+          </p>
         </div>
 
-        {/* Order Summary */}
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle>Trip Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Route</p>
-                <p className="font-medium">{trip.route.origin} → {trip.route.destination}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Date</p>
-                  <p className="font-medium">{new Date(trip.departureDate).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Time</p>
-                  <p className="font-medium">{trip.departureTime}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Bus Type</p>
-                <p className="font-medium">{trip.bus.busType.name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Selected Seat</p>
-                <p className="font-medium">#{seatSelection.selectedSeats.join(", #")}</p>
-              </div>
-              <div className="pt-4 border-t">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Total Amount</span>
-                  <span className="font-medium">UGX {totalAmount.toLocaleString()}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {!paymentId && (
+          <Button
+            className="w-full"
+            onClick={initiatePayment}
+            disabled={loading || !phoneNumber}
+          >
+            {loading ? "Processing..." : "Pay Now"}
+          </Button>
+        )}
+
+        {paymentId && (
+          <div className="text-center space-y-4">
+            <div className="animate-pulse">
+              <p className="text-lg font-semibold">Waiting for payment confirmation...</p>
+              <p className="text-sm text-gray-600">Please complete the payment on your phone</p>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => window.location.reload()}
+            >
+              Cancel Payment
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
