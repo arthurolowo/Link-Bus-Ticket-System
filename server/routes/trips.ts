@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { db } from '../storage.js';
-import { trips, routes, buses, busTypes } from '../schema.js';
+import { trips, routes, buses, busTypes, bookings } from '../schema.js';
 import { eq, and, gte, sql } from 'drizzle-orm';
+import { auth } from '../middleware/auth.js';
+import { tripSchema } from '../schema.js';
 
 interface SearchResult {
   id: number;
@@ -25,72 +27,337 @@ interface SearchResult {
       name: string | null;
       description: string | null;
       amenities: string[] | null;
+      totalSeats: number;
     };
   };
 }
 
 const router = Router();
 
-// Search trips endpoint
-router.get('/search', async (req, res) => {
+// Get all trips with details
+router.get('/', auth, async (req, res) => {
   try {
-    const { origin, destination, date } = req.query;
-
-    if (!origin || !destination || !date) {
-      return res.status(400).json({ message: 'Missing required search parameters' });
-    }
-
-    const searchDate = new Date(date as string);
-    // Format the date to match the database format (YYYY-MM-DD)
-    const formattedDate = searchDate.toISOString().split('T')[0];
-
     const results = await db
       .select()
       .from(trips)
       .innerJoin(routes, eq(trips.routeId, routes.id))
       .innerJoin(buses, eq(trips.busId, buses.id))
       .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-      .where(
-        and(
-          eq(routes.origin, origin as string),
-          eq(routes.destination, destination as string),
-          eq(trips.departureDate, formattedDate),
-          eq(trips.status, 'SCHEDULED')
-        )
-      );
+      .orderBy(trips.departureDate, trips.departureTime);
 
-    // Transform the results to match the expected format
-    const searchResults: SearchResult[] = results.map(row => ({
-      id: row.trips.id,
-      routeId: row.trips.routeId,
-      busId: row.trips.busId,
-      departureDate: row.trips.departureDate,
-      departureTime: row.trips.departureTime,
-      arrivalTime: row.trips.arrivalTime,
-      price: row.trips.price,
-      availableSeats: row.trips.availableSeats,
-      status: row.trips.status,
-      route: {
-        origin: row.routes.origin,
-        destination: row.routes.destination,
-        distance: row.routes.distance,
-        estimatedDuration: row.routes.estimatedDuration,
-      },
-      bus: {
-        busNumber: row.buses.busNumber,
-        busType: {
-          name: row.bus_types.name,
-          description: row.bus_types.description,
-          amenities: row.bus_types.amenities,
-        },
-      },
-    }));
+    const formattedTrips = results.map(formatTripResult);
+    res.json(formattedTrips);
+  } catch (error) {
+    console.error('Error fetching trips:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
-    res.json(searchResults);
+// Get single trip by ID
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db
+      .select()
+      .from(trips)
+      .innerJoin(routes, eq(trips.routeId, routes.id))
+      .innerJoin(buses, eq(trips.busId, buses.id))
+      .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .where(eq(trips.id, parseInt(id)))
+      .limit(1);
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: 'Trip not found' });
+    }
+
+    res.json(formatTripResult(result[0]));
+  } catch (error) {
+    console.error('Error fetching trip:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Search trips endpoint
+router.get('/search', auth, async (req, res) => {
+  try {
+    const { origin, destination, date, minPrice, maxPrice, busType } = req.query;
+
+    if (!origin || !destination || !date) {
+      return res.status(400).json({ message: 'Missing required search parameters' });
+    }
+
+    try {
+      const searchDate = new Date(date as string);
+      if (isNaN(searchDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid date format' });
+      }
+      const formattedDate = searchDate.toISOString().split('T')[0];
+
+      let baseQuery = db
+        .select()
+        .from(trips)
+        .innerJoin(routes, eq(trips.routeId, routes.id))
+        .innerJoin(buses, eq(trips.busId, buses.id))
+        .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+        .where(
+          and(
+            sql`LOWER(${routes.origin}) = LOWER(${origin as string})`,
+            sql`LOWER(${routes.destination}) = LOWER(${destination as string})`,
+            eq(trips.departureDate, formattedDate),
+            eq(trips.status, 'scheduled')
+          )
+        );
+
+      // Add price range filter if provided
+      if (minPrice) {
+        baseQuery = baseQuery.where(gte(trips.price, minPrice as string));
+      }
+      if (maxPrice) {
+        baseQuery = baseQuery.where(sql`CAST(${trips.price} AS DECIMAL) <= ${maxPrice}`);
+      }
+
+      // Add bus type filter if provided
+      if (busType) {
+        baseQuery = baseQuery.where(eq(busTypes.name, busType as string));
+      }
+
+      const results = await baseQuery;
+      const searchResults = results.map(formatTripResult);
+      res.json(searchResults);
+    } catch (error) {
+      console.error('Error processing date or executing query:', error);
+      return res.status(400).json({ message: 'Invalid search parameters' });
+    }
   } catch (error) {
     console.error('Error searching trips:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+// Add new trip (admin only)
+router.post('/', auth, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
+    const tripData = req.body;
+    
+    // Validate trip data
+    const validationResult = tripSchema.safeParse(tripData);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        message: 'Invalid trip data', 
+        errors: validationResult.error.errors 
+      });
+    }
+
+    // Validate times
+    const departureTime = new Date(`2000-01-01T${tripData.departureTime}`);
+    const arrivalTime = new Date(`2000-01-01T${tripData.arrivalTime}`);
+    if (departureTime >= arrivalTime) {
+      return res.status(400).json({ 
+        message: 'Departure time must be before arrival time' 
+      });
+    }
+
+    // Check if route exists and is active
+    const route = await db
+      .select()
+      .from(routes)
+      .where(eq(routes.id, tripData.routeId))
+      .limit(1);
+
+    if (!route.length || !route[0].isActive) {
+      return res.status(400).json({ 
+        message: 'Invalid or inactive route' 
+      });
+    }
+
+    // Check if bus exists and is active
+    const bus = await db
+      .select()
+      .from(buses)
+      .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .where(eq(buses.id, tripData.busId))
+      .limit(1);
+
+    if (!bus.length || !bus[0].buses.isActive) {
+      return res.status(400).json({ 
+        message: 'Invalid or inactive bus' 
+      });
+    }
+
+    // Set initial available seats from bus type
+    const availableSeats = bus[0].bus_types.totalSeats;
+
+    // Add new trip
+    const newTrip = await db
+      .insert(trips)
+      .values({
+        ...tripData,
+        availableSeats,
+        status: 'scheduled'
+      })
+      .returning();
+
+    res.status(201).json(newTrip[0]);
+  } catch (error) {
+    console.error('Error adding trip:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update trip (admin only)
+router.put('/:id', auth, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
+    const { id } = req.params;
+    const tripData = req.body;
+
+    // Validate trip data
+    const validationResult = tripSchema.safeParse(tripData);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        message: 'Invalid trip data', 
+        errors: validationResult.error.errors 
+      });
+    }
+
+    // Check if trip exists
+    const existingTrip = await db
+      .select()
+      .from(trips)
+      .where(eq(trips.id, parseInt(id)))
+      .limit(1);
+
+    if (!existingTrip.length) {
+      return res.status(404).json({ message: 'Trip not found' });
+    }
+
+    // Validate times
+    const departureTime = new Date(`2000-01-01T${tripData.departureTime}`);
+    const arrivalTime = new Date(`2000-01-01T${tripData.arrivalTime}`);
+    if (departureTime >= arrivalTime) {
+      return res.status(400).json({ 
+        message: 'Departure time must be before arrival time' 
+      });
+    }
+
+    // Update trip
+    const updatedTrip = await db
+      .update(trips)
+      .set(tripData)
+      .where(eq(trips.id, parseInt(id)))
+      .returning();
+
+    res.json(updatedTrip[0]);
+  } catch (error) {
+    console.error('Error updating trip:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update trip status (admin only)
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['scheduled', 'cancelled', 'completed'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    const updatedTrip = await db
+      .update(trips)
+      .set({ status })
+      .where(eq(trips.id, parseInt(id)))
+      .returning();
+
+    if (!updatedTrip.length) {
+      return res.status(404).json({ message: 'Trip not found' });
+    }
+
+    res.json(updatedTrip[0]);
+  } catch (error) {
+    console.error('Error updating trip status:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete trip (admin only)
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
+    const { id } = req.params;
+
+    // Check if trip has any bookings
+    const existingBookings = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.tripId, parseInt(id)))
+      .limit(1);
+
+    if (existingBookings.length > 0) {
+      return res.status(400).json({ 
+        message: 'Cannot delete trip with existing bookings. Try cancelling it instead.' 
+      });
+    }
+
+    const deletedTrip = await db
+      .delete(trips)
+      .where(eq(trips.id, parseInt(id)))
+      .returning();
+
+    if (!deletedTrip.length) {
+      return res.status(404).json({ message: 'Trip not found' });
+    }
+
+    res.json({ message: 'Trip deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting trip:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Helper function to format trip results
+function formatTripResult(row: any): SearchResult {
+  return {
+    id: row.trips.id,
+    routeId: row.trips.routeId,
+    busId: row.trips.busId,
+    departureDate: row.trips.departureDate,
+    departureTime: row.trips.departureTime,
+    arrivalTime: row.trips.arrivalTime,
+    price: row.trips.price,
+    availableSeats: row.trips.availableSeats,
+    status: row.trips.status,
+    route: {
+      origin: row.routes.origin,
+      destination: row.routes.destination,
+      distance: row.routes.distance,
+      estimatedDuration: row.routes.estimatedDuration,
+    },
+    bus: {
+      busNumber: row.buses.busNumber,
+      busType: {
+        name: row.bus_types.name,
+        description: row.bus_types.description,
+        amenities: row.bus_types.amenities,
+        totalSeats: row.bus_types.totalSeats,
+      },
+    },
+  };
+}
 
 export default router; 

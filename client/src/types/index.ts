@@ -48,20 +48,17 @@ export const LANGUAGES: Language[] = [
 
 export const UGANDAN_CITIES = [
   'Kampala',
-  'Entebbe',
-  'Jinja',
   'Mbarara',
+  'Kabale',
+  'Fort Portal',
   'Gulu',
   'Lira',
-  'Mbale',
-  'Fort Portal',
-  'Masaka',
   'Arua',
-  'Kabale',
-  'Kasese',
-  'Tororo',
+  'Mbale',
   'Soroti',
-  'Hoima',
+  'Masaka',
+  'Mityana',
+  'Bushenyi'
 ] as const;
 
 export type UgandanCity = typeof UGANDAN_CITIES[number];

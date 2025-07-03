@@ -297,7 +297,7 @@ export function BusManager() {
                     <SelectValue placeholder="Select a bus type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {busTypes?.map((type) => (
+                    {busTypes?.map((type: Bus['busType']) => (
                       <SelectItem key={type.id} value={type.id.toString()}>
                         {type.name} ({type.totalSeats} seats)
                       </SelectItem>

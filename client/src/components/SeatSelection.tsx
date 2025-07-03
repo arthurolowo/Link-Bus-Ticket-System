@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import PaymentForm from "./PaymentForm";
-import { SearchParams, SeatSelection as SeatSelectionType, TripWithDetails } from "../types";
-import { useNavigate } from 'react-router-dom';
-import { formatCurrency } from '@/lib/utils';
+import { getToken } from "../lib/authUtils";
+import { formatCurrency } from '../lib/utils';
 
 interface Seat {
   id: string;
@@ -16,17 +16,41 @@ interface Seat {
   price: number;
 }
 
-interface SeatSelectionProps {
-  trip: TripWithDetails;
-  onBack: () => void;
-  searchParams: SearchParams;
-  seats: Seat[];
-  maxSeats: number;
+interface Trip {
+  id: number;
+  routeId: number;
+  busId: number;
+  departureDate: string;
+  departureTime: string;
+  arrivalTime: string;
+  price: string;
+  availableSeats: number;
+  route: {
+    origin: string;
+    destination: string;
+    distance: number;
+    estimatedDuration: number;
+    isActive: number;
+  };
+  bus: {
+    busNumber: string;
+    busType: {
+      name: string;
+      description: string;
+      amenities: string[];
+    };
+  };
 }
 
-export default function SeatSelection({ trip, onBack, searchParams, seats, maxSeats }: SeatSelectionProps) {
+export default function SeatSelection() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const tripData = location.state as Trip;
+
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [seats, setSeats] = useState<Seat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [passengerDetails, setPassengerDetails] = useState({
     name: "",
     phone: "",
@@ -34,9 +58,42 @@ export default function SeatSelection({ trip, onBack, searchParams, seats, maxSe
   });
   const [showPayment, setShowPayment] = useState(false);
 
-  const seatPrice = parseFloat(trip.price);
-  const serviceFee = 2000;
-  const totalAmount = (selectedSeats.length * seatPrice) + serviceFee;
+  useEffect(() => {
+    if (!tripData) {
+      navigate('/');
+      return;
+    }
+
+    const fetchSeats = async () => {
+      try {
+        setLoading(true);
+        const token = getToken();
+        const response = await fetch(`http://localhost:5000/api/trips/${tripData.id}/seats`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch seats');
+        }
+
+        const data = await response.json();
+        setSeats(data);
+      } catch (error) {
+        console.error('Error fetching seats:', error);
+        setError('Failed to load seats. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSeats();
+  }, [tripData, navigate]);
+
+  const handleBack = () => {
+    navigate(-1);
+  };
 
   const handleSeatClick = (seat: Seat) => {
     if (seat.status === 'occupied') return;
@@ -45,17 +102,11 @@ export default function SeatSelection({ trip, onBack, searchParams, seats, maxSe
       if (prev.includes(seat.id)) {
         return prev.filter(id => id !== seat.id);
       }
-      if (prev.length >= maxSeats) {
+      if (prev.length >= parseInt(tripData.availableSeats.toString())) {
         return prev;
       }
       return [...prev, seat.id];
     });
-  };
-
-  const handleProceed = () => {
-    if (selectedSeats.length > 0) {
-      navigate('/payment', { state: { selectedSeats } });
-    }
   };
 
   const handleProceedToPayment = () => {
@@ -64,24 +115,59 @@ export default function SeatSelection({ trip, onBack, searchParams, seats, maxSe
     }
   };
 
-  const seatSelectionData: SeatSelectionType = {
-    tripId: trip.id,
-    selectedSeats,
-    passengerDetails,
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-lg">Loading seats...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const getSeatClassName = (seat: Seat) => {
-    const baseClass = 'seat';
-    if (selectedSeats.includes(seat.id)) return `${baseClass} seat-selected`;
-    return `${baseClass} seat-${seat.status}`;
-  };
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+          {error}
+        </div>
+        <Button variant="outline" onClick={handleBack}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Results
+        </Button>
+      </div>
+    );
+  }
 
   if (showPayment) {
     return (
       <PaymentForm
-        trip={trip}
-        seatSelection={seatSelectionData}
-        totalAmount={totalAmount}
+        trip={{
+          id: tripData.id.toString(),
+          departureDate: tripData.departureDate,
+          departureTime: tripData.departureTime,
+          arrivalTime: tripData.arrivalTime,
+          price: tripData.price,
+          route: {
+            origin: tripData.route.origin,
+            destination: tripData.route.destination,
+            estimatedDuration: tripData.route.estimatedDuration
+          },
+          bus: {
+            busNumber: tripData.bus.busNumber,
+            busType: {
+              name: tripData.bus.busType.name,
+              totalSeats: 60 // Default value based on standard bus configuration
+            }
+          }
+        }}
+        seatSelection={{
+          tripId: tripData.id.toString(),
+          selectedSeats,
+          passengerDetails,
+        }}
+        totalAmount={selectedSeats.length * parseFloat(tripData.price) + 2000}
         onBack={() => setShowPayment(false)}
       />
     );
@@ -90,116 +176,73 @@ export default function SeatSelection({ trip, onBack, searchParams, seats, maxSe
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={onBack}>
+        <Button variant="outline" onClick={handleBack}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Results
         </Button>
         <div>
           <h2 className="text-2xl font-bold">Select Your Seats</h2>
           <p className="text-muted-foreground">
-            {trip.bus.busType.name} • {trip.route.origin} → {trip.route.destination} • {new Date(trip.departureDate).toLocaleDateString()} at {trip.departureTime}
+            {tripData.bus.busType.name} • {tripData.route.origin} → {tripData.route.destination}
+            <br />
+            {new Date(tripData.departureDate).toLocaleDateString()} at {tripData.departureTime}
           </p>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="mb-4">
-          <h3 className="text-lg font-bold mb-2">Select Your Seats</h3>
-          <p className="text-sm">
-            You can select up to {maxSeats} seats. Selected: {selectedSeats.length}
-          </p>
-        </div>
-
-        <div className="flex gap-4 mb-4">
-          <div className="flex items-center gap-2">
-            <div className="seat seat-available">A</div>
-            <span className="text-sm">Available</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="seat seat-selected">S</div>
-            <span className="text-sm">Selected</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="seat seat-occupied">O</div>
-            <span className="text-sm">Occupied</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="seat seat-premium">P</div>
-            <span className="text-sm">Premium</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-4 gap-4 mb-4">
-          {seats.map((seat) => (
-            <button
-              key={seat.id}
-              className={getSeatClassName(seat)}
-              onClick={() => handleSeatClick(seat)}
-              disabled={seat.status === 'occupied'}
-            >
-              {seat.number}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-sm">Total Amount:</p>
-            <p className="font-bold">
-              UGX {formatCurrency(selectedSeats
-                .map(id => seats.find(seat => seat.id === id)?.price || 0)
-                .reduce((a, b) => a + b, 0))}
-            </p>
-          </div>
-          <button
-            className="btn btn-primary"
-            onClick={handleProceed}
-            disabled={selectedSeats.length === 0}
-          >
-            Proceed to Payment
-          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Booking Summary */}
-        <div className="lg:col-span-1">
-          <Card className="sticky top-24">
+        <div className="lg:col-span-2">
+          <Card>
             <CardHeader>
-              <CardTitle>Booking Summary</CardTitle>
+              <CardTitle>Available Seats</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Trip Details */}
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">Route</p>
-                  <p className="font-semibold">{trip.route.origin} → {trip.route.destination}</p>
+            <CardContent>
+              <div className="space-y-6">
+                <div className="flex gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="seat seat-available">A</div>
+                    <span className="text-sm">Available</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="seat seat-selected">S</div>
+                    <span className="text-sm">Selected</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="seat seat-occupied">O</div>
+                    <span className="text-sm">Occupied</span>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Date & Time</p>
-                  <p className="font-semibold">
-                    {new Date(trip.departureDate).toLocaleDateString()} • {trip.departureTime}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Selected Seats</p>
-                  <p className="font-semibold">
-                    {selectedSeats.length > 0 ? selectedSeats.join(', ') : 'None selected'}
-                  </p>
+
+                <div className="grid grid-cols-4 gap-4">
+                  {seats.map((seat) => (
+                    <button
+                      key={seat.id}
+                      className={`seat ${selectedSeats.includes(seat.id) ? 'seat-selected' : `seat-${seat.status}`}`}
+                      onClick={() => handleSeatClick(seat)}
+                      disabled={seat.status === 'occupied'}
+                    >
+                      {seat.number}
+                    </button>
+                  ))}
                 </div>
               </div>
+            </CardContent>
+          </Card>
 
-              {/* Passenger Details */}
-              <div className="space-y-4">
-                <h4 className="font-medium">Passenger Details</h4>
-                <div className="space-y-3">
+          <div className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Passenger Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
                   <div>
                     <Label htmlFor="name">Full Name *</Label>
                     <Input
                       id="name"
                       value={passengerDetails.name}
                       onChange={(e) => setPassengerDetails(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="Enter full name"
+                      placeholder="Enter your full name"
                     />
                   </div>
                   <div>
@@ -208,42 +251,58 @@ export default function SeatSelection({ trip, onBack, searchParams, seats, maxSe
                       id="phone"
                       value={passengerDetails.phone}
                       onChange={(e) => setPassengerDetails(prev => ({ ...prev, phone: e.target.value }))}
-                      placeholder="+256..."
+                      placeholder="Enter your phone number"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="email">Email (Optional)</Label>
+                    <Label htmlFor="email">Email Address</Label>
                     <Input
                       id="email"
                       type="email"
                       value={passengerDetails.email}
                       onChange={(e) => setPassengerDetails(prev => ({ ...prev, email: e.target.value }))}
-                      placeholder="your@email.com"
+                      placeholder="Enter your email address"
                     />
                   </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
-              {/* Price Breakdown */}
-              <div className="space-y-2 pt-4 border-t border-border">
-                <div className="flex justify-between text-sm">
-                  <span>Tickets ({selectedSeats.length})</span>
-                  <span>UGX {formatCurrency(selectedSeats.length * seatPrice)}</span>
+        <div className="lg:col-span-1">
+          <Card className="sticky top-24">
+            <CardHeader>
+              <CardTitle>Booking Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Selected Seats</p>
+                  <p className="font-semibold">
+                    {selectedSeats.length > 0 ? selectedSeats.join(', ') : 'None selected'}
+                  </p>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span>Service Fee</span>
-                  <span>UGX {formatCurrency(serviceFee)}</span>
+                <div>
+                  <p className="text-sm text-muted-foreground">Price per Seat</p>
+                  <p className="font-semibold">UGX {formatCurrency(parseFloat(tripData.price))}</p>
                 </div>
-                <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
-                  <span>Total</span>
-                  <span className="text-primary">UGX {formatCurrency(totalAmount)}</span>
+                <div>
+                  <p className="text-sm text-muted-foreground">Service Fee</p>
+                  <p className="font-semibold">UGX 2,000</p>
+                </div>
+                <div className="pt-4 border-t">
+                  <p className="text-sm text-muted-foreground">Total Amount</p>
+                  <p className="text-xl font-bold">
+                    UGX {formatCurrency(selectedSeats.length * parseFloat(tripData.price) + 2000)}
+                  </p>
                 </div>
               </div>
 
               <Button
+                className="w-full"
                 onClick={handleProceedToPayment}
                 disabled={selectedSeats.length === 0 || !passengerDetails.name || !passengerDetails.phone}
-                className="w-full btn-accent"
               >
                 Proceed to Payment
               </Button>

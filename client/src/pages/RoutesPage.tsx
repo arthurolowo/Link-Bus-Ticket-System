@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Clock, MapPin } from 'lucide-react';
+import { Clock, MapPin, AlertCircle } from 'lucide-react';
+import { Badge } from '../components/ui/badge';
+import { cn } from '../lib/utils';
+import { getToken } from '../lib/authUtils';
 
 interface Route {
   id: number;
@@ -24,7 +27,12 @@ export default function RoutesPage() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch('/api/routes');
+        const token = getToken();
+        const response = await fetch('http://localhost:5000/api/routes', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch routes');
         }
@@ -42,15 +50,23 @@ export default function RoutesPage() {
   }, []);
 
   const handleBookRoute = (route: Route) => {
-    const today = new Date().toISOString().split('T')[0];
-    navigate('/search-results', {
-      state: {
-        from: route.origin,
-        to: route.destination,
-        date: today,
-        passengers: '1'
-      }
-    });
+    if (!route.isActive) {
+      return;
+    }
+    // Set date to today at start of day in local timezone
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Create search params object matching the expected interface
+    const searchParams = {
+      from: route.origin,
+      to: route.destination,
+      date: today.toISOString().split('T')[0], // Format as YYYY-MM-DD
+      passengers: '1',
+      routeId: route.id.toString()
+    };
+
+    navigate('/search-results', { state: searchParams });
   };
 
   if (loading) {
@@ -67,8 +83,8 @@ export default function RoutesPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">Available Routes</h1>
-        <p className="text-gray-600">Browse our available bus routes and book your journey</p>
+        <h1 className="text-2xl font-bold mb-2">All Routes</h1>
+        <p className="text-gray-600">Browse all our bus routes - both active and inactive</p>
       </div>
 
       {error && (
@@ -79,13 +95,25 @@ export default function RoutesPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {routes.map((route) => (
-          <Card key={route.id}>
+          <Card 
+            key={route.id}
+            className={cn(
+              "border-2",
+              route.isActive ? "border-green-200" : "border-gray-200 bg-gray-50"
+            )}
+          >
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <MapPin className="h-5 w-5 text-primary" />
                   <span>{route.origin} → {route.destination}</span>
                 </div>
+                <Badge 
+                  variant={route.isActive ? "success" : "secondary"}
+                  className="ml-2"
+                >
+                  {route.isActive ? 'Active' : 'Inactive'}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -99,12 +127,19 @@ export default function RoutesPage() {
                     {route.distance} km
                   </div>
                 </div>
-                <Button 
-                  className="w-full" 
-                  onClick={() => handleBookRoute(route)}
-                >
-                  Book This Route
-                </Button>
+                {!route.isActive ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-100 p-2 rounded">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>This route is currently unavailable</span>
+                  </div>
+                ) : (
+                  <Button 
+                    className="w-full" 
+                    onClick={() => handleBookRoute(route)}
+                  >
+                    Book This Route
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

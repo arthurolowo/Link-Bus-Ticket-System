@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -7,12 +7,10 @@ import { Label } from "./ui/label";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useToast } from "../hooks/use-toast";
-import { ArrowLeft, CreditCard, Smartphone, Building2, Lock, Shield } from "lucide-react";
+import { ArrowLeft, CreditCard, Smartphone, Building2, Lock } from "lucide-react";
 import DigitalTicket from "./DigitalTicket";
-import { SeatSelection, PaymentData } from "../types";
-import { apiRequest } from "../lib/queryClient";
-import type { TripWithDetails, Booking } from "../types";
-import { formatCurrency } from '@/lib/utils';
+import { SeatSelection } from "../types";
+import type { TripWithDetails } from "../types";
 
 interface PaymentFormProps {
   trip: TripWithDetails;
@@ -22,7 +20,7 @@ interface PaymentFormProps {
 }
 
 export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }: PaymentFormProps) {
-  const [paymentMethod, setPaymentMethod] = useState<PaymentData['method']>('card');
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'mobile_money' | 'bank_transfer'>('card');
   const [cardDetails, setCardDetails] = useState({
     number: "",
     expiry: "",
@@ -33,31 +31,36 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
     provider: 'mtn' as 'mtn' | 'airtel',
     number: "",
   });
-  const [booking, setBooking] = useState<Booking | null>(null);
   const [showTicket, setShowTicket] = useState(false);
+  const [bookingId, setBookingId] = useState<number | null>(null);
 
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   const createBookingMutation = useMutation({
     mutationFn: async () => {
-      const bookingData = {
-        tripId: seatSelection.tripId,
-        passengerName: seatSelection.passengerDetails.name,
-        passengerPhone: seatSelection.passengerDetails.phone,
-        passengerEmail: seatSelection.passengerDetails.email || undefined,
-        seatNumbers: seatSelection.selectedSeats,
-        totalAmount: totalAmount.toString(),
-        paymentMethod,
-      };
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tripId: trip.id,
+          seatNumber: seatSelection.selectedSeats[0], // For now, handle single seat
+          totalAmount: totalAmount.toString(),
+        }),
+      });
 
-      const response = await apiRequest("POST", "/api/bookings", bookingData);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create booking');
+      }
+
       return response.json();
     },
-    onSuccess: (newBooking) => {
-      setBooking(newBooking);
+    onSuccess: (data) => {
+      setBookingId(data.id);
       // Process payment
-      processPayment(newBooking.id);
+      processPaymentMutation.mutate(data.id);
     },
     onError: (error: unknown) => {
       toast({
@@ -70,40 +73,41 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
 
   const processPaymentMutation = useMutation({
     mutationFn: async (bookingId: number) => {
-      const response = await apiRequest("POST", "/api/payments/process", {
-        bookingId,
-        paymentMethod,
+      const response = await fetch(`/api/bookings/${bookingId}/payment`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paymentStatus: 'completed',
+          paymentMethod,
+          ...(paymentMethod === 'card' ? { cardDetails } : {}),
+          ...(paymentMethod === 'mobile_money' ? { mobileDetails } : {}),
+        }),
       });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Payment failed');
+      }
+
       return response.json();
     },
-    onSuccess: (result) => {
-      if (result.success) {
-        toast({
-          title: "Payment Successful",
-          description: "Your ticket has been confirmed!",
-        });
-        setShowTicket(true);
-        queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
-      } else {
-        toast({
-          title: "Payment Failed",
-          description: result.message || "Payment processing failed",
-          variant: "destructive",
-        });
-      }
+    onSuccess: () => {
+      toast({
+        title: "Payment Successful",
+        description: "Your ticket has been confirmed!",
+      });
+      setShowTicket(true);
     },
     onError: (error: unknown) => {
       toast({
-        title: "Payment Error",
-        description: error instanceof Error ? error.message : "Payment processing error",
+        title: "Payment Failed",
+        description: error instanceof Error ? error.message : "Payment processing failed",
         variant: "destructive",
       });
     },
   });
-
-  const processPayment = (bookingId: number) => {
-    processPaymentMutation.mutate(bookingId);
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,14 +136,13 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
     createBookingMutation.mutate();
   };
 
-  if (showTicket && booking) {
+  if (showTicket && bookingId) {
     return (
       <DigitalTicket
-        booking={booking}
-        trip={trip}
+        bookingId={bookingId}
         onNewBooking={() => {
           setShowTicket(false);
-          setBooking(null);
+          setBookingId(null);
           onBack();
         }}
       />
@@ -174,7 +177,7 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
                 {/* Payment Methods */}
                 <div>
                   <Label className="text-base font-medium mb-4 block">Select Payment Method</Label>
-                  <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentData['method'])}>
+                  <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as typeof paymentMethod)}>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <label className="relative cursor-pointer">
                         <RadioGroupItem value="card" className="sr-only" />
@@ -241,18 +244,13 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
                   <div className="space-y-4">
                     <div>
                       <Label htmlFor="cardNumber">Card Number</Label>
-                      <div className="relative">
-                        <Input
-                          id="cardNumber"
-                          placeholder="1234 5678 9012 3456"
-                          value={cardDetails.number}
-                          onChange={(e) => setCardDetails(prev => ({ ...prev, number: e.target.value }))}
-                          className="pl-10"
-                        />
-                        <CreditCard className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-                      </div>
+                      <Input
+                        id="cardNumber"
+                        placeholder="1234 5678 9012 3456"
+                        value={cardDetails.number}
+                        onChange={(e) => setCardDetails(prev => ({ ...prev, number: e.target.value }))}
+                      />
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="expiry">Expiry Date</Label>
@@ -273,12 +271,11 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
                         />
                       </div>
                     </div>
-
                     <div>
-                      <Label htmlFor="cardName">Cardholder Name</Label>
+                      <Label htmlFor="cardName">Name on Card</Label>
                       <Input
                         id="cardName"
-                        placeholder="Full name as on card"
+                        placeholder="John Doe"
                         value={cardDetails.name}
                         onChange={(e) => setCardDetails(prev => ({ ...prev, name: e.target.value }))}
                       />
@@ -290,11 +287,12 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
                   <div className="space-y-4">
                     <div>
                       <Label htmlFor="provider">Mobile Money Provider</Label>
-                      <Select value={mobileDetails.provider} onValueChange={(value) => 
-                        setMobileDetails(prev => ({ ...prev, provider: value as 'mtn' | 'airtel' }))
-                      }>
+                      <Select
+                        value={mobileDetails.provider}
+                        onValueChange={(value) => setMobileDetails(prev => ({ ...prev, provider: value as 'mtn' | 'airtel' }))}
+                      >
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select provider" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="mtn">MTN Mobile Money</SelectItem>
@@ -302,12 +300,11 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div>
-                      <Label htmlFor="mobileNumber">Mobile Number</Label>
+                      <Label htmlFor="mobileNumber">Mobile Money Number</Label>
                       <Input
                         id="mobileNumber"
-                        placeholder="+256 7XX XXX XXX"
+                        placeholder="07XX XXX XXX"
                         value={mobileDetails.number}
                         onChange={(e) => setMobileDetails(prev => ({ ...prev, number: e.target.value }))}
                       />
@@ -316,50 +313,37 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
                 )}
 
                 {paymentMethod === 'bank_transfer' && (
-                  <div className="bg-muted p-4 rounded-lg">
-                    <h4 className="font-medium mb-2">Bank Transfer Instructions</h4>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Transfer the total amount to the following account and use your booking reference as the description:
-                    </p>
-                    <div className="space-y-1 text-sm">
-                      <p><strong>Bank:</strong> Stanbic Bank Uganda</p>
-                      <p><strong>Account Name:</strong> Link Bus Company Ltd</p>
-                      <p><strong>Account Number:</strong> 9030012345678</p>
-                      <p><strong>Swift Code:</strong> SBICUGKX</p>
+                  <div className="space-y-4">
+                    <div className="bg-muted p-4 rounded-lg">
+                      <p className="font-medium mb-2">Bank Account Details</p>
+                      <div className="space-y-2 text-sm">
+                        <p>Bank: Link Bus Bank</p>
+                        <p>Account Name: Link Bus Services Ltd</p>
+                        <p>Account Number: 1234567890</p>
+                        <p>Branch: Main Branch</p>
+                        <p>Reference: TRIP-{trip.id}</p>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Security Notice */}
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <Shield className="w-5 h-5 text-green-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-green-800">Secure Payment</h4>
-                      <p className="text-sm text-green-700 mt-1">
-                        Your payment information is encrypted and secure. We do not store your payment details.
-                      </p>
-                    </div>
+                {/* Order Summary */}
+                <div className="border-t pt-4 mt-6">
+                  <div className="flex justify-between items-center text-lg font-medium">
+                    <span>Total Amount</span>
+                    <span>UGX {totalAmount.toLocaleString()}</span>
                   </div>
                 </div>
 
                 {/* Submit Button */}
                 <Button
                   type="submit"
+                  className="w-full"
                   disabled={createBookingMutation.isPending || processPaymentMutation.isPending}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3"
                 >
-                  {createBookingMutation.isPending || processPaymentMutation.isPending ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Processing...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Lock className="w-4 h-4" />
-                      Pay Securely - UGX {formatCurrency(totalAmount)}
-                    </div>
-                  )}
+                  {createBookingMutation.isPending || processPaymentMutation.isPending
+                    ? "Processing..."
+                    : `Pay UGX ${totalAmount.toLocaleString()}`}
                 </Button>
               </form>
             </CardContent>
@@ -367,61 +351,39 @@ export default function PaymentForm({ trip, seatSelection, totalAmount, onBack }
         </div>
 
         {/* Order Summary */}
-        <div className="lg:col-span-1">
-          <Card className="sticky top-24">
+        <div>
+          <Card>
             <CardHeader>
-              <CardTitle>Order Summary</CardTitle>
+              <CardTitle>Trip Summary</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Trip Details */}
-              <div className="bg-muted p-4 rounded-lg">
-                <h4 className="font-medium mb-2">{trip.bus.busType.name}</h4>
-                <p className="text-sm text-muted-foreground">
-                  {trip.route.origin} → {trip.route.destination}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {new Date(trip.departureDate).toLocaleDateString()} • {trip.departureTime}
-                </p>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Route</p>
+                <p className="font-medium">{trip.route.origin} → {trip.route.destination}</p>
               </div>
-
-              {/* Passenger & Seats */}
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span>Passenger:</span>
-                  <span className="font-medium">{seatSelection.passengerDetails.name}</span>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Date</p>
+                  <p className="font-medium">{new Date(trip.departureDate).toLocaleDateString()}</p>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span>Seats:</span>
-                  <span className="font-medium">{seatSelection.selectedSeats.join(', ')}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Phone:</span>
-                  <span className="font-medium">{seatSelection.passengerDetails.phone}</span>
+                <div>
+                  <p className="text-sm text-muted-foreground">Time</p>
+                  <p className="font-medium">{trip.departureTime}</p>
                 </div>
               </div>
-
-              {/* Price Breakdown */}
-              <div className="space-y-2 pt-4 border-t border-border">
-                <div className="flex justify-between text-sm">
-                  <span>Ticket Price ({seatSelection.selectedSeats.length} seats)</span>
-                  <span>UGX {formatCurrency(seatSelection.selectedSeats.length * parseFloat(trip.price))}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Service Fee</span>
-                  <span>UGX {formatCurrency(2000)}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span>Total Amount</span>
-                  <span className="text-primary">UGX {formatCurrency(totalAmount)}</span>
-                </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Bus Type</p>
+                <p className="font-medium">{trip.bus.busType.name}</p>
               </div>
-
-              {/* Payment Method Display */}
-              <div className="bg-muted p-3 rounded-lg">
-                <p className="text-sm font-medium">Payment Method:</p>
-                <p className="text-sm text-muted-foreground capitalize">
-                  {paymentMethod.replace('_', ' ')}
-                </p>
+              <div>
+                <p className="text-sm text-muted-foreground">Selected Seat</p>
+                <p className="font-medium">#{seatSelection.selectedSeats.join(", #")}</p>
+              </div>
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Total Amount</span>
+                  <span className="font-medium">UGX {totalAmount.toLocaleString()}</span>
+                </div>
               </div>
             </CardContent>
           </Card>

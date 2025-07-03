@@ -19,6 +19,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import authRouter from './routes/auth.js';
 import routesRouter from './routes/routes.js';
 import busesRouter from './routes/buses.js';
+import bookingsRouter from './routes/bookings.js';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.use('/auth', authRouter);
 router.use('/trips', tripsRouter);
 router.use('/routes', routesRouter);
 router.use('/buses', busesRouter);
+router.use('/bookings', bookingsRouter);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api', router);

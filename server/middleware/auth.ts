@@ -28,43 +28,32 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
     email: string;
+    name?: string;
     isAdmin: boolean;
-    name: string;
   };
 }
 
-export const auth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export function auth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-
     if (!token) {
       return res.status(401).json({ message: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTUser;
-
-    // Get user from database to verify admin status
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, decoded.id));
-
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid token' });
-    }
-
-    req.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      isAdmin: user.is_admin || false
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+      id: string;
+      email: string;
+      name?: string;
+      isAdmin: boolean;
     };
 
+    req.user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid token' });
+    console.error('Auth error:', error);
+    res.status(401).json({ message: 'Invalid token' });
   }
-};
+}
 
 export const generateToken = (user: JWTUser) => {
   return jwt.sign(

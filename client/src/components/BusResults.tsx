@@ -2,12 +2,12 @@ import { useState, useMemo } from "react";
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../lib/utils';
 import { Button } from "./ui/button";
-import { Card, CardContent } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
-import { ArrowLeft, Clock, MapPin, Wifi, Snowflake, Zap, Volume2, ArrowRight, Filter } from "lucide-react";
+import { ArrowLeft, Clock, MapPin, Wifi, Snowflake, Zap, Volume2, ArrowRight, Filter, Users, AlertCircle } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -34,6 +34,7 @@ interface Bus {
     destination: string;
     distance: number;
     estimatedDuration: number;
+    isActive: number;
   };
   bus: {
     busNumber: string;
@@ -55,7 +56,7 @@ export function BusResults({ buses, loading = false }: BusResultsProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
+      <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
           <p className="text-lg">Loading available buses...</p>
@@ -66,77 +67,96 @@ export function BusResults({ buses, loading = false }: BusResultsProps) {
 
   if (buses.length === 0) {
     return (
-      <div className="text-center p-8">
-        <p className="text-lg mb-4">No buses found for your search criteria.</p>
-        <Button onClick={() => navigate('/')} variant="outline">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Search
-        </Button>
+      <div className="text-center py-8">
+        <p className="text-lg text-gray-600">No buses found for this route and date.</p>
       </div>
     );
   }
 
-  const handleSelectBus = (busId: number) => {
-    navigate(`/select-seats/${busId}`);
+  const handleSelectBus = (bus: Bus) => {
+    if (!bus.route.isActive) {
+      return; // Don't allow selection of buses on inactive routes
+    }
+    
+    // Navigate to seat selection with all required trip details
+    navigate(`/select-seats`, {
+      state: {
+        tripId: bus.id,
+        routeId: bus.routeId,
+        busId: bus.busId,
+        departureDate: bus.departureDate,
+        departureTime: bus.departureTime,
+        arrivalTime: bus.arrivalTime,
+        price: bus.price,
+        availableSeats: bus.availableSeats,
+        route: bus.route,
+        bus: bus.bus
+      }
+    });
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       {buses.map((bus) => (
-        <Card key={bus.id} className="p-6">
-          <CardContent className="p-0">
-            <div className="flex justify-between items-start mb-6">
+        <Card 
+          key={bus.id}
+          className={bus.route.isActive ? "" : "border-gray-200 bg-gray-50"}
+        >
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-bold mb-2">{bus.bus.busType.name}</h3>
-                <p className="text-sm text-gray-500">{bus.bus.busNumber}</p>
+                <span className="text-lg">{bus.bus.busType.name}</span>
+                <span className="text-sm text-gray-500 ml-2">({bus.bus.busNumber})</span>
               </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold">UGX {formatCurrency(bus.price)}</p>
-                <Badge variant={bus.availableSeats > 10 ? "default" : "secondary"} className="mt-2">
-                  {bus.availableSeats} seats left
-                </Badge>
+              {!bus.route.isActive && (
+                <Badge variant="secondary">Route Inactive</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">Departure</p>
+                  <p className="font-medium">{new Date(bus.departureTime).toLocaleTimeString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Arrival</p>
+                  <p className="font-medium">{new Date(bus.arrivalTime).toLocaleTimeString()}</p>
+                </div>
               </div>
-            </div>
+              
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm">{Math.round(bus.route.estimatedDuration / 60)} hours</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Users className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm">{bus.availableSeats} seats left</span>
+                  </div>
+                </div>
+                <div className="text-lg font-semibold">
+                  UGX {parseInt(bus.price).toLocaleString()}
+                </div>
+              </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div>
-                <p className="text-sm text-gray-500">Departure</p>
-                <p className="font-semibold">{bus.departureTime}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Arrival</p>
-                <p className="font-semibold">{bus.arrivalTime}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Duration</p>
-                <p className="font-semibold">{Math.round(bus.route.estimatedDuration / 60)} hours</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Distance</p>
-                <p className="font-semibold">{bus.route.distance} km</p>
-              </div>
+              {!bus.route.isActive ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-100 p-2 rounded">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>This route is currently unavailable for booking</span>
+                </div>
+              ) : (
+                <Button 
+                  className="w-full" 
+                  onClick={() => handleSelectBus(bus)}
+                  disabled={bus.availableSeats === 0}
+                >
+                  {bus.availableSeats === 0 ? 'Fully Booked' : 'Select Seats'}
+                </Button>
+              )}
             </div>
-
-            <div className="flex flex-wrap gap-2 mb-6">
-              {bus.bus.busType.amenities.map((amenity, index) => (
-                <Badge key={index} variant="secondary">
-                  {amenity === 'Air Conditioning' && <Snowflake className="h-4 w-4 mr-1" />}
-                  {amenity === 'WiFi' && <Wifi className="h-4 w-4 mr-1" />}
-                  {amenity === 'USB Charging' && <Zap className="h-4 w-4 mr-1" />}
-                  {amenity === 'Entertainment' && <Volume2 className="h-4 w-4 mr-1" />}
-                  {amenity}
-                </Badge>
-              ))}
-            </div>
-
-            <Button 
-              className="w-full" 
-              onClick={() => handleSelectBus(bus.id)}
-              disabled={bus.availableSeats === 0}
-            >
-              {bus.availableSeats === 0 ? 'Sold Out' : 'Select Seats'}
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
           </CardContent>
         </Card>
       ))}

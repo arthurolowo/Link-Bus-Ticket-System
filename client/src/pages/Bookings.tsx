@@ -1,6 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../components/ui/card';
+import { Button } from '../components/ui/button';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/use-toast';
+import { getToken } from '../lib/authUtils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../components/ui/alert-dialog";
 
 interface Booking {
   id: number;
@@ -32,30 +46,67 @@ export default function Bookings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const { toast } = useToast();
+
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const token = getToken();
+      const response = await fetch('http://localhost:5000/api/bookings/my-bookings', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch bookings');
+      }
+      const data = await response.json();
+      setBookings(data);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      setError('Failed to load bookings. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchBookings = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await fetch('/api/bookings/user');
-        if (!response.ok) {
-          throw new Error('Failed to fetch bookings');
-        }
-        const data = await response.json();
-        setBookings(data);
-      } catch (error) {
-        console.error('Error fetching bookings:', error);
-        setError('Failed to load bookings. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (user) {
       fetchBookings();
     }
   }, [user]);
+
+  const handleCancelBooking = async (bookingId: number) => {
+    try {
+      const token = getToken();
+      const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/cancel`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to cancel booking');
+      }
+
+      toast({
+        title: "Booking Cancelled",
+        description: "Your booking has been successfully cancelled.",
+      });
+
+      // Refresh bookings list
+      fetchBookings();
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      toast({
+        title: "Error",
+        description: "Failed to cancel booking. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (!user) {
     return (
@@ -108,9 +159,11 @@ export default function Bookings() {
                       ? 'bg-green-100 text-green-800' 
                       : booking.paymentStatus === 'pending'
                       ? 'bg-yellow-100 text-yellow-800'
+                      : booking.paymentStatus === 'cancelled'
+                      ? 'bg-gray-100 text-gray-800'
                       : 'bg-red-100 text-red-800'
                   }`}>
-                    {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
+                    {(booking.paymentStatus || 'unknown').charAt(0).toUpperCase() + (booking.paymentStatus || 'unknown').slice(1)}
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -146,6 +199,29 @@ export default function Bookings() {
                   </div>
                 </div>
               </CardContent>
+              {['pending', 'completed'].includes(booking.paymentStatus) && (
+                <CardFooter className="flex justify-end pt-4">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive">Cancel Booking</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to cancel this booking? This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleCancelBooking(booking.id)}>
+                          Yes, Cancel Booking
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </CardFooter>
+              )}
             </Card>
           ))}
         </div>

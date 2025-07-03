@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -7,26 +7,71 @@ import {
   Download, 
   Share2, 
   QrCode, 
-  Calendar, 
   Clock, 
-  MapPin,
   Bus,
-  User,
-  Phone,
-  Mail,
   AlertTriangle
 } from "lucide-react";
-import type { Booking, TripWithDetails } from "../types";
-import { formatCurrency } from '@/lib/utils';
+import { useToast } from "../hooks/use-toast";
 
 interface DigitalTicketProps {
-  booking: Booking;
-  trip: TripWithDetails;
+  bookingId: number;
   onNewBooking: () => void;
 }
 
-export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTicketProps) {
+interface BookingDetails {
+  id: number;
+  bookingReference: string;
+  seatNumber: number;
+  paymentStatus: string;
+  totalAmount: string;
+  qrCode: string;
+  trip: {
+    departureDate: string;
+    departureTime: string;
+    arrivalTime: string;
+    route: {
+      origin: string;
+      destination: string;
+      estimatedDuration: number | null;
+    };
+    bus: {
+      busNumber: string;
+      busType: {
+        name: string;
+      };
+    };
+  };
+}
+
+export default function DigitalTicket({ bookingId, onNewBooking }: DigitalTicketProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [booking, setBooking] = useState<BookingDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchBooking = async () => {
+      try {
+        const response = await fetch(`/api/bookings/${bookingId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch booking details');
+        }
+        const data = await response.json();
+        setBooking(data);
+      } catch (error) {
+        console.error('Error fetching booking:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load booking details",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBooking();
+  }, [bookingId, toast]);
 
   const handleDownloadPDF = () => {
     setIsDownloading(true);
@@ -36,12 +81,14 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
       // In a real implementation, this would trigger PDF download
       const link = document.createElement('a');
       link.href = '#'; // Would be actual PDF URL
-      link.download = `ticket-${booking.bookingReference}.pdf`;
+      link.download = `ticket-${booking?.bookingReference}.pdf`;
       // link.click();
     }, 2000);
   };
 
   const handleShare = async () => {
+    if (!booking) return;
+
     if (navigator.share) {
       try {
         await navigator.share({
@@ -55,13 +102,38 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
     } else {
       // Fallback: copy to clipboard
       navigator.clipboard.writeText(
-        `Bus Ticket ${booking.bookingReference}\n${trip.route.origin} → ${trip.route.destination}\n${new Date(trip.departureDate).toLocaleDateString()} at ${trip.departureTime}`
+        `Bus Ticket ${booking.bookingReference}\n${booking.trip.route.origin} → ${booking.trip.route.destination}\n${new Date(booking.trip.departureDate).toLocaleDateString()} at ${booking.trip.departureTime}`
       );
+      toast({
+        title: "Copied to clipboard",
+        description: "Ticket details have been copied to your clipboard",
+      });
     }
   };
 
-  // Generate QR code data (in a real app, this would be a proper QR code)
-  const qrCodeData = `LB:${booking.bookingReference}:${booking.id}:${trip.id}`;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-lg">Loading ticket...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!booking) {
+    return (
+      <div className="text-center py-8">
+        <div className="text-red-600 mb-4">
+          <AlertTriangle className="w-12 h-12 mx-auto" />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Booking Not Found</h2>
+        <p className="text-gray-600 mb-4">We couldn't find the ticket details.</p>
+        <Button onClick={onNewBooking}>Book Another Trip</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background py-8">
@@ -101,36 +173,18 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
           </div>
 
           <CardContent className="p-6">
-            {/* Passenger Information */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-              <div>
-                <div className="text-sm text-muted-foreground mb-1">Passenger Name</div>
-                <div className="font-semibold flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  {booking.passengerName}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-1">Phone Number</div>
-                <div className="font-semibold flex items-center gap-2">
-                  <Phone className="w-4 h-4" />
-                  {booking.passengerPhone}
-                </div>
-              </div>
-            </div>
-
             {/* Journey Details */}
             <div className="border-t border-b border-border py-6 mb-6">
               <div className="flex items-center justify-between">
                 <div className="text-center">
-                  <div className="text-xl font-bold">{trip.route.origin.toUpperCase()}</div>
+                  <div className="text-xl font-bold">{booking.trip.route.origin.toUpperCase()}</div>
                   <div className="text-sm text-muted-foreground">Departure</div>
                   <div className="text-lg font-semibold text-primary mt-2 flex items-center gap-1">
                     <Clock className="w-4 h-4" />
-                    {trip.departureTime}
+                    {booking.trip.departureTime}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    {new Date(trip.departureDate).toLocaleDateString('en-GB', {
+                    {new Date(booking.trip.departureDate).toLocaleDateString('en-GB', {
                       weekday: 'short',
                       day: 'numeric',
                       month: 'short',
@@ -145,8 +199,8 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
                     <div className="mx-4 text-muted-foreground">
                       <Bus className="w-6 h-6 text-primary" />
                       <div className="text-xs mt-1">
-                        {trip.route.estimatedDuration ? 
-                          `${Math.floor(trip.route.estimatedDuration / 60)}h ${trip.route.estimatedDuration % 60}m` : 
+                        {booking.trip.route.estimatedDuration ? 
+                          `${Math.floor(booking.trip.route.estimatedDuration / 60)}h ${booking.trip.route.estimatedDuration % 60}m` : 
                           'Direct'
                         }
                       </div>
@@ -156,14 +210,14 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
                 </div>
                 
                 <div className="text-center">
-                  <div className="text-xl font-bold">{trip.route.destination.toUpperCase()}</div>
+                  <div className="text-xl font-bold">{booking.trip.route.destination.toUpperCase()}</div>
                   <div className="text-sm text-muted-foreground">Arrival</div>
                   <div className="text-lg font-semibold text-primary mt-2 flex items-center gap-1">
                     <Clock className="w-4 h-4" />
-                    {trip.arrivalTime}
+                    {booking.trip.arrivalTime}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    {new Date(trip.departureDate).toLocaleDateString('en-GB', {
+                    {new Date(booking.trip.departureDate).toLocaleDateString('en-GB', {
                       weekday: 'short',
                       day: 'numeric',
                       month: 'short',
@@ -178,20 +232,18 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
               <div className="text-center">
                 <div className="text-sm text-muted-foreground mb-1">Bus Service</div>
-                <div className="font-semibold">{trip.bus.busType.name}</div>
-                <div className="text-xs text-muted-foreground">Bus {trip.bus.busNumber}</div>
+                <div className="font-semibold">{booking.trip.bus.busType.name}</div>
+                <div className="text-xs text-muted-foreground">Bus {booking.trip.bus.busNumber}</div>
               </div>
               <div className="text-center">
-                <div className="text-sm text-muted-foreground mb-1">Seat Number{Array.isArray(booking.seatNumbers) && booking.seatNumbers.length > 1 ? 's' : ''}</div>
+                <div className="text-sm text-muted-foreground mb-1">Seat Number</div>
                 <div className="text-xl font-bold text-primary">
-                  {Array.isArray(booking.seatNumbers) 
-                    ? booking.seatNumbers.join(', ') 
-                    : booking.seatNumbers}
+                  #{booking.seatNumber}
                 </div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-muted-foreground mb-1">Total Paid</div>
-                <div className="font-semibold">UGX {formatCurrency(booking.totalAmount)}</div>
+                <div className="font-semibold">UGX {parseInt(booking.totalAmount).toLocaleString()}</div>
                 <div className="text-xs text-muted-foreground">Incl. fees</div>
               </div>
             </div>
@@ -247,19 +299,10 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
               <Button 
                 onClick={handleDownloadPDF}
                 disabled={isDownloading}
-                className="flex-1 btn-primary"
+                className="flex-1"
               >
-                {isDownloading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Generating PDF...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Download className="w-4 h-4" />
-                    Download PDF
-                  </div>
-                )}
+                <Download className="w-4 h-4 mr-2" />
+                {isDownloading ? 'Downloading...' : 'Download PDF'}
               </Button>
               <Button 
                 onClick={handleShare}
@@ -269,16 +312,12 @@ export default function DigitalTicket({ booking, trip, onNewBooking }: DigitalTi
                 <Share2 className="w-4 h-4 mr-2" />
                 Share Ticket
               </Button>
-            </div>
-
-            {/* New Booking Button */}
-            <div className="mt-6 pt-6 border-t border-border text-center">
               <Button 
                 onClick={onNewBooking}
                 variant="outline"
-                className="w-full sm:w-auto"
+                className="flex-1"
               >
-                Book Another Journey
+                Book Another Trip
               </Button>
             </div>
           </CardContent>
