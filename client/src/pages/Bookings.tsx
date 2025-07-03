@@ -18,13 +18,15 @@ import {
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
-interface Booking {
-  id: number;
-  bookingReference: string;
-  seatNumber: number;
-  paymentStatus: string;
-  totalAmount: string;
-  createdAt: string;
+interface BookingResponse {
+  booking: {
+    id: number;
+    bookingReference: string;
+    seatNumber: number;
+    paymentStatus: string;
+    totalAmount: string;
+    createdAt: string;
+  };
   trip: {
     id: number;
     departureDate: string;
@@ -70,7 +72,6 @@ interface Trip {
 }
 
 export default function Bookings() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -80,7 +81,7 @@ export default function Bookings() {
   const navigate = useNavigate();
   const [selectedSeats, setSelectedSeats] = useState(1);
 
-  const { data: bookingsData, isLoading, error: queryError } = useQuery<Booking[]>({
+  const { data: bookingsData, isLoading, error: queryError } = useQuery<BookingResponse[]>({
     queryKey: ['bookings'],
     queryFn: async () => {
       const token = getToken();
@@ -174,6 +175,8 @@ export default function Bookings() {
   }
 
   const handleBooking = async () => {
+    if (!trip) return;
+    
     try {
       const response = await fetch('http://localhost:5000/api/bookings', {
         method: 'POST',
@@ -234,17 +237,17 @@ export default function Bookings() {
       )}
 
       <div className="space-y-4">
-        {bookingsData?.map((booking) => (
+        {bookingsData?.map(({ booking, trip }) => (
           <Card key={booking.id} className="p-6">
             <div className="grid gap-6 md:grid-cols-2">
               <div>
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-lg font-semibold">
-                      {booking.trip.route.origin} → {booking.trip.route.destination}
+                      {trip.route.origin} → {trip.route.destination}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {new Date(booking.trip.departureDate).toLocaleDateString()}
+                      {new Date(trip.departureDate).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="text-right">
@@ -269,7 +272,7 @@ export default function Bookings() {
                   </p>
                   <p>
                     <span className="font-medium">Bus: </span>
-                    {booking.trip.bus.busType.name} ({booking.trip.bus.busNumber})
+                    {trip.bus.busType.name} ({trip.bus.busNumber})
                   </p>
                 </div>
               </div>
@@ -278,11 +281,11 @@ export default function Bookings() {
                 <div className="space-y-2">
                   <p>
                     <span className="font-medium">Departure: </span>
-                    {booking.trip.departureTime}
+                    {trip.departureTime}
                   </p>
                   <p>
                     <span className="font-medium">Arrival: </span>
-                    {booking.trip.arrivalTime}
+                    {trip.arrivalTime}
                   </p>
                   <p>
                     <span className="font-medium">Amount: </span>
