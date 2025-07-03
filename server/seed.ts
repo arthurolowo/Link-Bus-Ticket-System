@@ -10,11 +10,7 @@ import { sql } from 'drizzle-orm';
 dotenv.config();
 
 const pool = new Pool({
-  user: 'postgres',
-  password: 'postgres',
-  host: 'localhost',
-  port: 5432,
-  database: 'bus_ticket_system'
+  connectionString: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/bus_ticket_system'
 });
 
 const db = drizzle(pool);
@@ -31,453 +27,166 @@ async function seed() {
 
     console.log('✅ Cleared existing data');
 
-    // Insert single admin user
+    // Insert admin user
     const [adminUser] = await db.insert(users).values({
       id: uuidv4(),
-      name: 'Mukasa John',
+      name: 'Admin User',
       email: 'admin@linkbus.com',
       password: await bcrypt.hash('admin123', 10),
-      phone: '+256700123456',
+      phone: '+256700000000',
       is_admin: true,
       is_verified: true,
     }).returning();
 
-    // Insert test user
-    const [regularUser] = await db.insert(users).values({
-      id: uuidv4(),
-      name: 'Nakato Sarah',
-      email: 'sarah@example.com',
-      password: await bcrypt.hash('test123', 10),
-      phone: '+256712345678',
-      is_admin: false,
-      is_verified: true,
-    }).returning();
+    console.log('✅ Admin user created');
 
-    console.log('✅ Users created successfully!');
-
-    // Insert bus types with detailed configurations
+    // Insert 3 bus types
     const busTypesData = await db.insert(busTypes).values([
       {
         name: 'VIP Executive',
-        description: 'Premium luxury coach with extra legroom and exclusive services',
-        amenities: [
-          'Premium Reclining Seats',
-          'Personal Entertainment System',
-          'High-Speed WiFi',
-          'USB & Power Outlets',
-          'Air Conditioning',
-          'Onboard Restroom',
-          'Refreshment Service',
-          'Reading Lights',
-          'Extra Legroom',
-          'Personal Air Vents',
-          'Footrests',
-          'Tray Tables',
-          'Magazine Pocket',
-          'Overhead Storage'
-        ],
-        seatLayout: {
-          rows: 10,
-          columns: 3,
-          seats: Array.from({ length: 30 }, (_, i) => ({
-            number: `${i + 1}`,
-            type: 'premium' as const,
-            position: { row: Math.floor(i / 3) + 1, column: (i % 3) + 1 }
-          }))
-        },
+        description: 'Premium luxury coach',
+        amenities: ['WiFi', 'AC', 'USB Charging'],
         totalSeats: 30
       },
       {
         name: 'Business Class',
-        description: 'Comfortable coach with business-oriented amenities',
-        amenities: [
-          'Comfortable Reclining Seats',
-          'WiFi',
-          'USB Charging',
-          'Air Conditioning',
-          'Onboard Restroom',
-          'Reading Lights',
-          'Footrests',
-          'Tray Tables',
-          'Overhead Storage'
-        ],
-        seatLayout: {
-          rows: 12,
-          columns: 4,
-          seats: Array.from({ length: 48 }, (_, i) => ({
-            number: `${i + 1}`,
-            type: i < 16 ? ('premium' as const) : ('regular' as const),
-            position: { row: Math.floor(i / 4) + 1, column: (i % 4) + 1 }
-          }))
-        },
+        description: 'Comfortable coach',
+        amenities: ['AC', 'USB Charging'],
         totalSeats: 48
       },
       {
-        name: 'Economy Plus',
-        description: 'Enhanced economy coach with added comfort features',
-        amenities: [
-          'Standard Reclining Seats',
-          'Air Conditioning',
-          'USB Charging',
-          'Onboard Restroom',
-          'Overhead Storage'
-        ],
-        seatLayout: {
-          rows: 13,
-          columns: 4,
-          seats: Array.from({ length: 52 }, (_, i) => ({
-            number: `${i + 1}`,
-            type: 'regular' as const,
-            position: { row: Math.floor(i / 4) + 1, column: (i % 4) + 1 }
-          }))
-        },
-        totalSeats: 52
-      },
-      {
-        name: 'Economy Standard',
-        description: 'Affordable and reliable transportation',
-        amenities: [
-          'Standard Seats',
-          'Basic Air Conditioning',
-          'Overhead Storage'
-        ],
-        seatLayout: {
-          rows: 14,
-          columns: 4,
-          seats: Array.from({ length: 56 }, (_, i) => ({
-            number: `${i + 1}`,
-            type: 'regular' as const,
-            position: { row: Math.floor(i / 4) + 1, column: (i % 4) + 1 }
-          }))
-        },
+        name: 'Economy',
+        description: 'Standard coach',
+        amenities: ['AC'],
         totalSeats: 56
       }
     ]).returning();
 
-    console.log('✅ Bus types created successfully!');
+    console.log('✅ Bus types created');
 
-    // Insert comprehensive route network
+    // Insert 7 routes
     const routesData = await db.insert(routes).values([
-      // Major Western Routes
       {
         origin: 'Kampala',
         destination: 'Mbarara',
         distance: 266,
-        estimatedDuration: 300, // 5 hours
+        estimatedDuration: 300,
         isActive: 1
       },
       {
         origin: 'Kampala',
-        destination: 'Kabale',
-        distance: 420,
-        estimatedDuration: 420, // 7 hours
+        destination: 'Gulu',
+        distance: 333,
+        estimatedDuration: 360,
+        isActive: 1
+      },
+      {
+        origin: 'Mbarara',
+        destination: 'Kampala',
+        distance: 266,
+        estimatedDuration: 300,
+        isActive: 1
+      },
+      {
+        origin: 'Gulu',
+        destination: 'Kampala',
+        distance: 333,
+        estimatedDuration: 360,
         isActive: 1
       },
       {
         origin: 'Kampala',
         destination: 'Fort Portal',
         distance: 297,
-        estimatedDuration: 360, // 6 hours
-        isActive: 1
-      },
-      // Northern Routes
-      {
-        origin: 'Kampala',
-        destination: 'Gulu',
-        distance: 333,
-        estimatedDuration: 360, // 6 hours
+        estimatedDuration: 360,
         isActive: 1
       },
       {
-        origin: 'Kampala',
-        destination: 'Lira',
-        distance: 340,
-        estimatedDuration: 360, // 6 hours
+        origin: 'Fort Portal',
+        destination: 'Kampala',
+        distance: 297,
+        estimatedDuration: 360,
         isActive: 1
       },
       {
         origin: 'Kampala',
-        destination: 'Arua',
-        distance: 499,
-        estimatedDuration: 480, // 8 hours
-        isActive: 1
-      },
-      // Eastern Routes
-      {
-        origin: 'Kampala',
-        destination: 'Mbale',
-        distance: 224,
-        estimatedDuration: 300, // 5 hours
-        isActive: 1
-      },
-      {
-        origin: 'Kampala',
-        destination: 'Soroti',
-        distance: 347,
-        estimatedDuration: 360, // 6 hours
-        isActive: 1
-      },
-      // Central Routes
-      {
-        origin: 'Kampala',
-        destination: 'Masaka',
-        distance: 120,
-        estimatedDuration: 180, // 3 hours
-        isActive: 1
-      },
-      // Short Routes
-      {
-        origin: 'Kampala',
-        destination: 'Mityana',
-        distance: 77,
-        estimatedDuration: 120, // 2 hours
-        isActive: 1
-      },
-      // Connection Routes
-      {
-        origin: 'Mbarara',
-        destination: 'Kabale',
-        distance: 154,
-        estimatedDuration: 180, // 3 hours
-        isActive: 1
-      },
-      {
-        origin: 'Mbarara',
-        destination: 'Bushenyi',
-        distance: 45,
-        estimatedDuration: 60, // 1 hour
+        destination: 'Jinja',
+        distance: 80,
+        estimatedDuration: 120,
         isActive: 1
       }
     ]).returning();
 
-    console.log('✅ Routes created successfully!');
+    console.log('✅ Routes created');
 
-    // Calculate price based on distance and bus type
-    const calculatePrice = (distance: number, busTypeId: number, isPeak: boolean = true): string => {
-      // Base rate per kilometer
-      let ratePerKm = 200; // UGX
+    // Create 10 buses
+    const busesData = await db.insert(buses).values([
+      { busNumber: 'VIP-001', busTypeId: busTypesData[0].id, isActive: 1 },
+      { busNumber: 'VIP-002', busTypeId: busTypesData[0].id, isActive: 1 },
+      { busNumber: 'VIP-003', busTypeId: busTypesData[0].id, isActive: 1 },
+      { busNumber: 'BUS-001', busTypeId: busTypesData[1].id, isActive: 1 },
+      { busNumber: 'BUS-002', busTypeId: busTypesData[1].id, isActive: 1 },
+      { busNumber: 'BUS-003', busTypeId: busTypesData[1].id, isActive: 1 },
+      { busNumber: 'ECO-001', busTypeId: busTypesData[2].id, isActive: 1 },
+      { busNumber: 'ECO-002', busTypeId: busTypesData[2].id, isActive: 1 },
+      { busNumber: 'ECO-003', busTypeId: busTypesData[2].id, isActive: 1 },
+      { busNumber: 'ECO-004', busTypeId: busTypesData[2].id, isActive: 1 }
+    ]).returning();
 
-      // Premium for VIP and Business class
-      if (busTypeId === busTypesData[0].id) { // VIP Executive
-        ratePerKm = 300;
-      } else if (busTypeId === busTypesData[1].id) { // Business Class
-        ratePerKm = 250;
-      }
+    console.log('✅ Buses created');
 
-      // Calculate base price
-      let price = distance * ratePerKm;
-
-      // Peak time premium (10% extra)
-      if (isPeak) {
-        price *= 1.1;
-      }
-
-      // Round to nearest thousand
-      price = Math.round(price / 1000) * 1000;
-
-      return price.toString();
-    };
-
-    // Insert buses for each route (2 buses per route)
-    const busesData = [];
-    for (const route of routesData) {
-      // Assign VIP Executive and Business Class buses for long routes (>300km)
-      const busTypesForRoute = (route.distance || 0) > 300 
-        ? [busTypesData[0], busTypesData[1]] // VIP and Business for long routes
-        : [busTypesData[1], busTypesData[2]]; // Business and Economy Plus for shorter routes
-
-      busesData.push(
-        {
-          busNumber: `LB${Math.floor(1000 + Math.random() * 9000)}`,
-          busTypeId: busTypesForRoute[0].id,
-          isActive: 1
-        },
-        {
-          busNumber: `LB${Math.floor(1000 + Math.random() * 9000)}`,
-          busTypeId: busTypesForRoute[1].id,
-          isActive: 1
-        }
-      );
-    }
-
-    const insertedBuses = await db.insert(buses).values(busesData).returning();
-    console.log('✅ Buses created successfully!');
-
-    // Generate trips for the next 3 months starting tomorrow
-    const tripsToInsert = [];
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    
-    const endDate = new Date(tomorrow);
-    endDate.setMonth(endDate.getMonth() + 3);
-
-    for (let date = new Date(tomorrow); date <= endDate; date.setDate(date.getDate() + 1)) {
-      const dateStr = date.toISOString().split('T')[0];
-      const isPeak = date.getDay() === 5 || date.getDay() === 6 || date.getDay() === 0; // Friday, Saturday, Sunday
-
-      for (let i = 0; i < routesData.length; i++) {
-        const route = routesData[i];
-        const routeBuses = insertedBuses.slice(i * 2, (i * 2) + 2); // Get the two buses assigned to this route
-        const estimatedDuration = route.estimatedDuration || 0;
-
-        // Morning trip with first bus (7 AM)
-        tripsToInsert.push({
-          routeId: route.id,
-          busId: routeBuses[0].id,
-          departureDate: dateStr,
-          departureTime: '07:00',
-          arrivalTime: new Date(date.getTime() + estimatedDuration * 60000)
-            .toTimeString()
-            .slice(0, 5),
-          price: calculatePrice(route.distance || 0, routeBuses[0].busTypeId, isPeak),
-          availableSeats: busTypesData.find(bt => bt.id === routeBuses[0].busTypeId)?.totalSeats || 0,
-          status: 'scheduled'
-        });
-
-        // Mid-morning trip with second bus (10 AM)
-        tripsToInsert.push({
-          routeId: route.id,
-          busId: routeBuses[1].id,
-          departureTime: '10:00',
-          departureDate: dateStr,
-          arrivalTime: new Date(date.getTime() + estimatedDuration * 60000 + 10 * 3600000)
-            .toTimeString()
-            .slice(0, 5),
-          price: calculatePrice(route.distance || 0, routeBuses[1].busTypeId, isPeak),
-          availableSeats: busTypesData.find(bt => bt.id === routeBuses[1].busTypeId)?.totalSeats || 0,
-          status: 'scheduled'
-        });
-
-        // Afternoon trip with first bus (2 PM)
-        tripsToInsert.push({
-          routeId: route.id,
-          busId: routeBuses[0].id,
-          departureDate: dateStr,
-          departureTime: '14:00',
-          arrivalTime: new Date(date.getTime() + estimatedDuration * 60000 + 14 * 3600000)
-            .toTimeString()
-            .slice(0, 5),
-          price: calculatePrice(route.distance || 0, routeBuses[0].busTypeId, isPeak),
-          availableSeats: busTypesData.find(bt => bt.id === routeBuses[0].busTypeId)?.totalSeats || 0,
-          status: 'scheduled'
-        });
-
-        // Evening trip with second bus (5 PM)
-        tripsToInsert.push({
-          routeId: route.id,
-          busId: routeBuses[1].id,
-          departureDate: dateStr,
-          departureTime: '17:00',
-          arrivalTime: new Date(date.getTime() + estimatedDuration * 60000 + 17 * 3600000)
-            .toTimeString()
-            .slice(0, 5),
-          price: calculatePrice(route.distance || 0, routeBuses[1].busTypeId, isPeak),
-          availableSeats: busTypesData.find(bt => bt.id === routeBuses[1].busTypeId)?.totalSeats || 0,
-          status: 'scheduled'
-        });
-      }
-    }
-
-    // Insert all trips in batches
-    const BATCH_SIZE = 100;
-    const insertedTrips = [];
-    for (let i = 0; i < tripsToInsert.length; i += BATCH_SIZE) {
-      const batch = tripsToInsert.slice(i, i + BATCH_SIZE);
-      const result = await db.insert(trips).values(batch).returning();
-      insertedTrips.push(...result);
-    }
-
-    console.log(`✅ Created ${tripsToInsert.length} trips for the next 3 months`);
-
-    // Create sample bookings with various statuses
-    const bookingStatuses = ['confirmed', 'cancelled', 'completed', 'pending'];
-
-    // Generate some historical bookings for analytics
-    for (let i = 0; i < 50; i++) {
-      const tripIndex = Math.floor(Math.random() * insertedTrips.length);
-      const trip = insertedTrips[tripIndex];
-      const status = bookingStatuses[Math.floor(Math.random() * bookingStatuses.length)];
-      const historicalDate = new Date();
-      historicalDate.setDate(historicalDate.getDate() - Math.floor(Math.random() * 30));
-
-      const booking: InsertBooking = {
-        userId: regularUser.id,
-        tripId: trip.id,
-        seatNumber: Math.floor(Math.random() * 30) + 1,
-        bookingReference: `BK${Math.floor(10000 + Math.random() * 90000)}`,
-        paymentStatus: status === 'confirmed' ? 'completed' : 'pending',
-        totalAmount: trip.price,
-        createdAt: historicalDate
-      };
-
-      await db.insert(bookings).values(booking);
-    }
-
-    console.log('✅ Sample bookings created successfully!');
-    console.log('✅ Database seeded successfully!');
-
-    // Print admin credentials
-    console.log('\nAdmin Credentials:');
-    console.log('Admin - Email: admin@linkbus.com, Password: admin123');
-
-    // Add trips for today and upcoming dates
+    // Create 15 trips for the next 5 days
     const today = new Date();
-    const nextWeek = new Date(today);
-    nextWeek.setDate(today.getDate() + 7);
+    const tripsList = [];
+    
+    for (let i = 0; i < 15; i++) {
+      const dayOffset = Math.floor(i / 3); // Spread 3 trips per day over 5 days
+      const tripDate = new Date(today);
+      tripDate.setDate(today.getDate() + dayOffset);
+      
+      const routeIndex = i % routesData.length;
+      const busIndex = i % busesData.length;
+      const route = routesData[routeIndex];
+      const bus = busesData[busIndex];
+      
+      // Set departure times at 7:00, 11:00, and 15:00
+      const hour = 7 + (i % 3) * 4;
+      const departureTime = `${hour.toString().padStart(2, '0')}:00`;
+      
+      // Calculate arrival time based on route duration
+      const duration = route.estimatedDuration || 0;
+      const arrivalHour = (hour + Math.floor(duration / 60)) % 24;
+      const arrivalTime = `${arrivalHour.toString().padStart(2, '0')}:00`;
 
-    // Format dates for SQL
-    const todayStr = today.toISOString().split('T')[0];
-    const nextWeekStr = nextWeek.toISOString().split('T')[0];
+      // Calculate price based on distance and bus type
+      const baseRate = bus.busTypeId === busTypesData[0].id ? 300 : // VIP
+                      bus.busTypeId === busTypesData[1].id ? 250 : // Business
+                      200; // Economy
+      const distance = route.distance || 0;
+      const price = Math.ceil((distance * baseRate) / 1000) * 1000;
 
-    // Get buses for Kampala to Mbarara route (first route)
-    const routeBuses = insertedBuses.slice(0, 2); // Get the two buses assigned to this route
-
-    // Add trips for Kampala to Mbarara route
-    await db.insert(trips).values([
-      // Morning trip
-      {
-        routeId: routesData[0].id,
-        busId: routeBuses[0].id,
-        departureDate: todayStr,
-        departureTime: '07:00',
-        arrivalTime: '12:00',
-        price: calculatePrice(266, routeBuses[0].busTypeId),
-        availableSeats: busTypesData.find(bt => bt.id === routeBuses[0].busTypeId)?.totalSeats || 0,
+      tripsList.push({
+        routeId: route.id,
+        busId: bus.id,
+        departureDate: tripDate.toISOString().split('T')[0],
+        departureTime,
+        arrivalTime,
+        price: price.toString(),
+        availableSeats: busTypesData.find(bt => bt.id === bus.busTypeId)?.totalSeats || 0,
         status: 'scheduled'
-      },
-      // Afternoon trip
-      {
-        routeId: routesData[0].id,
-        busId: routeBuses[1].id,
-        departureDate: todayStr,
-        departureTime: '14:00',
-        arrivalTime: '19:00',
-        price: calculatePrice(266, routeBuses[1].busTypeId),
-        availableSeats: busTypesData.find(bt => bt.id === routeBuses[1].busTypeId)?.totalSeats || 0,
-        status: 'scheduled'
-      },
-      // Next week morning trip
-      {
-        routeId: routesData[0].id,
-        busId: routeBuses[0].id,
-        departureDate: nextWeekStr,
-        departureTime: '07:00',
-        arrivalTime: '12:00',
-        price: calculatePrice(266, routeBuses[0].busTypeId),
-        availableSeats: busTypesData.find(bt => bt.id === routeBuses[0].busTypeId)?.totalSeats || 0,
-        status: 'scheduled'
-      }
-    ]);
+      });
+    }
 
-    console.log('✅ Added trips for Kampala to Mbarara route');
+    const tripsData = await db.insert(trips).values(tripsList).returning();
+    console.log('✅ Trips created');
 
+    await pool.end();
+    console.log('✅ Seed completed successfully!');
+    process.exit(0);
   } catch (error) {
     console.error('Error seeding database:', error);
-    throw error;
-  } finally {
-    await pool.end();
+    process.exit(1);
   }
 }
 
-seed().catch(console.error); 
+seed(); 

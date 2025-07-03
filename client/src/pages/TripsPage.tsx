@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/use-toast';
+import { apiRequest } from '../lib/queryClient';
 
 interface Trip {
   id: number;
@@ -39,24 +40,37 @@ export default function TripsPage() {
     date: ''
   });
 
-  const { data: trips, isLoading } = useQuery<Trip[]>({
+  const { data: trips, isLoading, error } = useQuery<Trip[]>({
     queryKey: ['trips', searchParams],
     queryFn: async () => {
-      if (!searchParams.origin || !searchParams.destination || !searchParams.date) return [];
-      
-      const params = new URLSearchParams({
-        origin: searchParams.origin,
-        destination: searchParams.destination,
-        date: searchParams.date
-      });
-
-      const response = await fetch(`/api/trips/search?${params}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch trips');
+      try {
+        if (searchParams.origin && searchParams.destination && searchParams.date) {
+          const params = new URLSearchParams(searchParams);
+          const response = await fetch(`http://localhost:5000/api/trips/search?${params}`, {
+            credentials: 'include'
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+          console.log('Search response:', data);
+          return data;
+        }
+        
+        const response = await fetch('http://localhost:5000/api/trips', {
+          credentials: 'include'
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log('All trips response:', data);
+        return data;
+      } catch (error) {
+        console.error('Error fetching trips:', error);
+        throw error;
       }
-      return response.json();
-    },
-    enabled: Boolean(searchParams.origin && searchParams.destination && searchParams.date)
+    }
   });
 
   const handleBookTrip = (tripId: number) => {
@@ -81,6 +95,16 @@ export default function TripsPage() {
       date: urlParams.get('date') || ''
     });
   }, []);
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-red-500">
+          Error loading trips: {error instanceof Error ? error.message : 'Unknown error'}
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <div>Loading...</div>;

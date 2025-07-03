@@ -34,9 +34,10 @@ interface SearchResult {
 
 const router = Router();
 
-// Get all trips with details
-router.get('/', auth, async (req, res) => {
+// Get all trips with details - public endpoint
+router.get('/', async (req, res) => {
   try {
+    console.log('GET /api/trips - Fetching all trips');
     const results = await db
       .select()
       .from(trips)
@@ -45,16 +46,20 @@ router.get('/', auth, async (req, res) => {
       .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
       .orderBy(trips.departureDate, trips.departureTime);
 
+    console.log('Raw query results:', results);
+    
     const formattedTrips = results.map(formatTripResult);
+    console.log('Formatted trips:', formattedTrips);
+    
     res.json(formattedTrips);
   } catch (error) {
     console.error('Error fetching trips:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
-// Get single trip by ID
-router.get('/:id', auth, async (req, res) => {
+// Get single trip by ID - public endpoint
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await db
@@ -77,8 +82,8 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// Search trips endpoint
-router.get('/search', auth, async (req, res) => {
+// Search trips endpoint - public endpoint
+router.get('/search', async (req, res) => {
   try {
     const { origin, destination, date, minPrice, maxPrice, busType } = req.query;
 
