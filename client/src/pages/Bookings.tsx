@@ -16,7 +16,7 @@ import {
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface BookingResponse {
   booking: {
@@ -72,6 +72,7 @@ interface Trip {
 }
 
 export default function Bookings() {
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -211,7 +212,47 @@ export default function Bookings() {
   };
 
   const handleCancelBooking = async (bookingId: number) => {
-    // ... existing code ...
+    try {
+      const token = getToken();
+      if (!token) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to cancel a booking",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/cancel`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to cancel booking');
+      }
+
+      toast({
+        title: "Success",
+        description: "Your booking has been cancelled successfully.",
+      });
+
+      // Refresh the bookings data using React Query
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+    } catch (error) {
+      console.error('Cancel booking error:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to cancel booking",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
