@@ -67,7 +67,10 @@ export function SearchForm() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
-      navigate('/search-results', { state: formData });
+      navigate('/trips', { 
+        state: formData,
+        replace: true 
+      });
     }
   };
 

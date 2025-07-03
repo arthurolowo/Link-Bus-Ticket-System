@@ -15,6 +15,7 @@ import Support from './pages/Support';
 import NotFound from './pages/not-found';
 import NewBooking from './pages/NewBooking';
 import Bookings from './pages/Bookings';
+import SearchResults from './pages/SearchResults';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './hooks/useAuth';
 
@@ -32,6 +33,7 @@ function App() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/routes" element={<RoutesPage />} />
                 <Route path="/trips" element={<TripsPage />} />
+                <Route path="/search-results" element={<SearchResults />} />
                 <Route path="/bookings" element={
                   <ProtectedRoute>
                     <Bookings />
