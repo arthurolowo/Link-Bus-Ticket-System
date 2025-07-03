@@ -171,7 +171,7 @@ export default function NewBooking() {
       {showPayment && bookingId ? (
         <PaymentForm
           bookingId={bookingId}
-          amount={trip.price}
+          amount={Number(trip.price).toFixed(2)}
           onPaymentComplete={handlePaymentSuccess}
           onPaymentError={handlePaymentCancel}
         />

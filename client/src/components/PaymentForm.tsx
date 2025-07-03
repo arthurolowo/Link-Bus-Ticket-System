@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { useToast } from "../hooks/use-toast";
 import { getToken } from '../lib/authUtils';
 
@@ -14,6 +15,7 @@ interface PaymentFormProps {
 
 export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPaymentError }: PaymentFormProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [provider, setProvider] = useState<'mtn' | 'airtel'>('mtn');
   const [loading, setLoading] = useState(false);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -46,6 +48,7 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
           bookingId,
           amount,
           paymentMethod: 'mobile_money',
+          provider,
           phoneNumber
         }),
       });
@@ -60,7 +63,7 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
       
       toast({
         title: "Payment Initiated",
-        description: "Please check your phone for the payment prompt.",
+        description: `Please check your ${provider.toUpperCase()} phone for the payment prompt.`,
       });
 
       // Start polling payment status
@@ -153,19 +156,58 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
         <p className="text-gray-600">Amount to pay: UGX {Number(amount).toLocaleString()}</p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
+        <div className="space-y-3">
+          <Label>Select Provider</Label>
+          <RadioGroup
+            value={provider}
+            onValueChange={(value) => setProvider(value as 'mtn' | 'airtel')}
+            className="grid grid-cols-2 gap-4"
+          >
+            <div>
+              <RadioGroupItem
+                value="mtn"
+                id="mtn"
+                className="peer sr-only"
+              />
+              <Label
+                htmlFor="mtn"
+                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+              >
+                <span className="text-xl font-bold">MTN</span>
+                <span className="text-sm text-muted-foreground">Mobile Money</span>
+              </Label>
+            </div>
+
+            <div>
+              <RadioGroupItem
+                value="airtel"
+                id="airtel"
+                className="peer sr-only"
+              />
+              <Label
+                htmlFor="airtel"
+                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+              >
+                <span className="text-xl font-bold">Airtel</span>
+                <span className="text-sm text-muted-foreground">Money</span>
+              </Label>
+            </div>
+          </RadioGroup>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="phoneNumber">Mobile Money Number</Label>
           <Input
             id="phoneNumber"
             type="tel"
-            placeholder="Enter your phone number (e.g., 256771234567)"
+            placeholder={`Enter your ${provider.toUpperCase()} number (e.g., 256${provider === 'mtn' ? '77' : '75'}1234567)`}
             value={phoneNumber}
             onChange={(e) => setPhoneNumber(e.target.value)}
             disabled={loading || !!paymentId}
           />
           <p className="text-sm text-gray-500">
-            Enter your phone number in international format (e.g., 256771234567)
+            Enter your phone number in international format (e.g., 256{provider === 'mtn' ? '77' : '75'}1234567)
           </p>
         </div>
 
@@ -175,7 +217,7 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
             onClick={initiatePayment}
             disabled={loading || !phoneNumber}
           >
-            {loading ? "Processing..." : "Pay Now"}
+            {loading ? "Processing..." : `Pay with ${provider.toUpperCase()}`}
           </Button>
         )}
 

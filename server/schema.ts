@@ -167,17 +167,17 @@ export const bookingSchema = z.object({
   paymentStatus: z.enum(['pending', 'completed', 'failed', 'cancelled']).optional(),
 });
 
-export const payments = mysqlTable('payments', {
+export const payments = pgTable('payments', {
   id: varchar('id', { length: 36 }).primaryKey(),
-  bookingId: int('booking_id').notNull(),
+  bookingId: integer('booking_id').references(() => bookings.id).notNull(),
   amount: varchar('amount', { length: 255 }).notNull(),
   paymentMethod: varchar('payment_method', { length: 50 }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('pending'),
   externalReference: varchar('external_reference', { length: 50 }),
   phoneNumber: varchar('phone_number', { length: 20 }),
   paymentDetails: text('payment_details'),
-  createdAt: timestamp('created_at').default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp('updated_at').default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
 export const paymentsRelations = relations(payments, ({ one }) => ({
