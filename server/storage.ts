@@ -5,6 +5,8 @@ import {
   buses,
   trips,
   bookings,
+  payments,
+  paymentsRelations,
   type DBUser,
   type UpsertUser,
   type Route,
@@ -34,7 +36,18 @@ if (!process.env.DATABASE_URL) {
 }
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle(pool, { schema: { users, routes, busTypes, buses, trips, bookings } });
+export const db = drizzle(pool, { 
+  schema: { 
+    users, 
+    routes, 
+    busTypes, 
+    buses, 
+    trips, 
+    bookings, 
+    payments,
+    paymentsRelations 
+  } 
+});
 
 export interface TripSearchFilters {
   minTime?: string;

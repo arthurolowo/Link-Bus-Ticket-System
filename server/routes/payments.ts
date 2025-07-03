@@ -14,27 +14,78 @@ const MOMO_SUBSCRIPTION_KEY = process.env.MOMO_SUBSCRIPTION_KEY;
 const MOMO_API_USER = process.env.MOMO_API_USER;
 const MOMO_API_KEY = process.env.MOMO_API_KEY;
 
-// Helper function to get MTN MoMo access token
-async function getMoMoAccessToken() {
-  try {
-    const auth = Buffer.from(`${MOMO_API_USER}:${MOMO_API_KEY}`).toString('base64');
-    const response = await axios.post(`${MOMO_API_URL}/collection/token/`, null, {
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Ocp-Apim-Subscription-Key': MOMO_SUBSCRIPTION_KEY
-      }
+// Simulated mobile money processing
+const simulatePayment = async (paymentId: string, amount: string, provider: string) => {
+  // Simulate processing time
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // Simulate success (90% success rate)
+  const success = Math.random() < 0.9;
+  
+  if (success) {
+    await db.update(payments)
+      .set({ 
+        status: 'completed', 
+        updatedAt: new Date(),
+        paymentDetails: JSON.stringify({
+          transactionId: `${provider.toUpperCase()}-${Date.now()}`,
+          status: 'SUCCESSFUL',
+          amount,
+          currency: 'UGX',
+          reason: 'Payment completed successfully'
+        })
+      })
+      .where(eq(payments.id, paymentId));
+
+    // Update booking status
+    const payment = await db.query.payments.findFirst({
+      where: eq(payments.id, paymentId)
     });
-    return response.data.access_token;
-  } catch (error) {
-    console.error('Error getting MoMo access token:', error);
-    throw new Error('Failed to authenticate with payment provider');
+
+    if (payment) {
+      await db.update(bookings)
+        .set({ paymentStatus: 'completed' })
+        .where(eq(bookings.id, payment.bookingId));
+    }
+
+    return true;
+  } else {
+    await db.update(payments)
+      .set({ 
+        status: 'failed', 
+        updatedAt: new Date(),
+        paymentDetails: JSON.stringify({
+          status: 'FAILED',
+          reason: 'Insufficient funds or network error'
+        })
+      })
+      .where(eq(payments.id, paymentId));
+    return false;
   }
-}
+};
 
 // Initiate payment
 router.post('/initiate', auth, async (req, res) => {
   try {
-    const { bookingId, amount, paymentMethod, phoneNumber } = req.body;
+    const { bookingId, amount, paymentMethod, provider, phoneNumber, pin } = req.body;
+
+    // Validate required fields
+    if (!bookingId || !amount || !paymentMethod || !provider || !phoneNumber || !pin) {
+      return res.status(400).json({ message: 'Missing required payment information' });
+    }
+
+    // Validate PIN format
+    if (!/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ message: 'Invalid PIN format' });
+    }
+
+    // Validate phone number format (Uganda)
+    const phoneRegex = /^256[7][0-9]{8}$/;
+    if (!phoneRegex.test(phoneNumber)) {
+      return res.status(400).json({ 
+        message: 'Invalid phone number format. Use format: 256701234567' 
+      });
+    }
 
     // Validate booking exists and belongs to user
     const booking = await db.query.bookings.findFirst({
@@ -48,7 +99,7 @@ router.post('/initiate', auth, async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    if (booking.userId !== req.user.id) {
+    if (booking.userId !== req.user!.id) {
       return res.status(403).json({ message: 'Unauthorized access to booking' });
     }
 
@@ -60,60 +111,24 @@ router.post('/initiate', auth, async (req, res) => {
       id: paymentId,
       bookingId,
       amount,
-      paymentMethod,
+      paymentMethod: `${provider}_mobile_money`,
       status: 'pending',
       externalReference,
       phoneNumber,
       createdAt: new Date()
     });
 
-    if (paymentMethod === 'mobile_money') {
-      try {
-        // Get MoMo access token
-        const accessToken = await getMoMoAccessToken();
+    // Simulate payment processing
+    simulatePayment(paymentId, amount, provider)
+      .catch(error => {
+        console.error('Payment simulation error:', error);
+      });
 
-        // Initiate MoMo payment request
-        const momoResponse = await axios.post(
-          `${MOMO_API_URL}/collection/v1_0/requesttopay`,
-          {
-            amount,
-            currency: 'UGX',
-            externalId: externalReference,
-            payer: {
-              partyIdType: 'MSISDN',
-              partyId: phoneNumber
-            },
-            payerMessage: `Bus ticket payment for booking ${booking.bookingReference}`,
-            payeeNote: `Payment for ${booking.trip.route.origin} to ${booking.trip.route.destination}`
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'X-Reference-Id': paymentId,
-              'X-Target-Environment': process.env.NODE_ENV === 'production' ? 'production' : 'sandbox',
-              'Ocp-Apim-Subscription-Key': MOMO_SUBSCRIPTION_KEY
-            }
-          }
-        );
-
-        return res.json({
-          paymentId,
-          status: 'pending',
-          message: 'Payment initiated. Please check your phone for the payment prompt.'
-        });
-      } catch (error) {
-        console.error('MoMo API Error:', error);
-        
-        // Update payment status to failed
-        await db.update(payments)
-          .set({ status: 'failed', updatedAt: new Date() })
-          .where(eq(payments.id, paymentId));
-
-        throw new Error('Failed to initiate mobile money payment');
-      }
-    }
-
-    throw new Error('Unsupported payment method');
+    return res.json({
+      paymentId,
+      status: 'pending',
+      message: `Payment initiated. Processing ${provider.toUpperCase()} Mobile Money payment...`
+    });
   } catch (error) {
     console.error('Payment initiation error:', error);
     res.status(500).json({
@@ -139,57 +154,11 @@ router.get('/:paymentId/status', auth, async (req, res) => {
       return res.status(404).json({ message: 'Payment not found' });
     }
 
-    if (payment.booking.userId !== req.user.id) {
+    if (payment.booking.userId !== req.user!.id) {
       return res.status(403).json({ message: 'Unauthorized access to payment' });
     }
 
-    if (payment.status !== 'pending') {
-      return res.json({ status: payment.status });
-    }
-
-    // Check MoMo payment status
-    try {
-      const accessToken = await getMoMoAccessToken();
-      const momoResponse = await axios.get(
-        `${MOMO_API_URL}/collection/v1_0/requesttopay/${paymentId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'X-Target-Environment': process.env.NODE_ENV === 'production' ? 'production' : 'sandbox',
-            'Ocp-Apim-Subscription-Key': MOMO_SUBSCRIPTION_KEY
-          }
-        }
-      );
-
-      let newStatus = 'pending';
-      if (momoResponse.data.status === 'SUCCESSFUL') {
-        newStatus = 'completed';
-      } else if (['FAILED', 'REJECTED', 'TIMEOUT'].includes(momoResponse.data.status)) {
-        newStatus = 'failed';
-      }
-
-      // Update payment and booking status if payment is complete
-      if (newStatus !== 'pending') {
-        await db.update(payments)
-          .set({ 
-            status: newStatus, 
-            updatedAt: new Date(),
-            paymentDetails: momoResponse.data
-          })
-          .where(eq(payments.id, paymentId));
-
-        if (newStatus === 'completed') {
-          await db.update(bookings)
-            .set({ paymentStatus: 'completed' })
-            .where(eq(bookings.id, payment.bookingId));
-        }
-      }
-
-      return res.json({ status: newStatus });
-    } catch (error) {
-      console.error('MoMo status check error:', error);
-      throw new Error('Failed to check payment status');
-    }
+    return res.json({ status: payment.status });
   } catch (error) {
     console.error('Payment status check error:', error);
     res.status(500).json({

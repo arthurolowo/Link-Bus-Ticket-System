@@ -91,14 +91,14 @@ export default function Home() {
             <p className="text-xl opacity-90">
               Book your bus tickets online for a seamless journey across major cities
             </p>
-          </div>
-          
+      </div>
+
           <div className="max-w-2xl mx-auto">
             <Card className="shadow-lg">
               <SearchForm />
             </Card>
           </div>
-        </div>
+              </div>
       </section>
 
       {/* Features Section */}
@@ -113,7 +113,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-semibold mb-2">Quick Booking</h3>
               <p className="text-gray-600">Book your tickets in minutes with our easy-to-use platform</p>
-            </div>
+              </div>
 
             <div className="text-center p-6">
               <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -123,7 +123,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-semibold mb-2">Secure Travel</h3>
               <p className="text-gray-600">Safe and comfortable travel with experienced drivers</p>
-            </div>
+              </div>
 
             <div className="text-center p-6">
               <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -146,10 +146,10 @@ export default function Home() {
             {popularRoutes.map((route) => (
               <Card key={route.id} className="p-6 hover:shadow-lg transition-shadow">
                 <div className="flex justify-between items-center mb-4">
-                  <div>
+                    <div>
                     <h3 className="font-semibold text-lg">{route.origin} → {route.destination}</h3>
                     <p className="text-gray-600">Daily Departures</p>
-                  </div>
+                      </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-500">Starting from</p>
                     <p className="text-lg font-semibold text-blue-600">UGX {Math.round(route.distance / 1000)}</p>
@@ -222,7 +222,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </div>
+      </div>
       </section>
     </div>
   );

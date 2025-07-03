@@ -166,16 +166,16 @@ async function seed() {
       const price = Math.ceil((distance * baseRate) / 1000) * 1000;
 
       tripsList.push({
-        routeId: route.id,
+          routeId: route.id,
         busId: bus.id,
         departureDate: tripDate.toISOString().split('T')[0],
         departureTime,
         arrivalTime,
         price: price.toString(),
         availableSeats: busTypesData.find(bt => bt.id === bus.busTypeId)?.totalSeats || 0,
-        status: 'scheduled'
-      });
-    }
+          status: 'scheduled'
+        });
+      }
 
     const tripsData = await db.insert(trips).values(tripsList).returning();
     console.log('✅ Trips created');

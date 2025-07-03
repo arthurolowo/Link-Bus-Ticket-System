@@ -143,32 +143,10 @@ export default function SeatSelection() {
   if (showPayment) {
     return (
       <PaymentForm
-        trip={{
-          id: tripData.id.toString(),
-          departureDate: tripData.departureDate,
-          departureTime: tripData.departureTime,
-          arrivalTime: tripData.arrivalTime,
-          price: tripData.price,
-          route: {
-            origin: tripData.route.origin,
-            destination: tripData.route.destination,
-            estimatedDuration: tripData.route.estimatedDuration
-          },
-          bus: {
-            busNumber: tripData.bus.busNumber,
-            busType: {
-              name: tripData.bus.busType.name,
-              totalSeats: 60 // Default value based on standard bus configuration
-            }
-          }
-        }}
-        seatSelection={{
-          tripId: tripData.id.toString(),
-          selectedSeats,
-          passengerDetails,
-        }}
-        totalAmount={selectedSeats.length * parseFloat(tripData.price) + 2000}
-        onBack={() => setShowPayment(false)}
+        bookingId={parseInt(tripData.id.toString())}
+        amount={selectedSeats.length * parseFloat(tripData.price) + 2000 + ''}
+        onPaymentComplete={() => navigate('/bookings')}
+        onPaymentError={() => setShowPayment(false)}
       />
     );
   }

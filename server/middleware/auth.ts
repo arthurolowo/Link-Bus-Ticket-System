@@ -47,6 +47,10 @@ export function auth(req: AuthRequest, res: Response, next: NextFunction) {
       isAdmin: boolean;
     };
 
+    if (!decoded.id) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+
     req.user = decoded;
     next();
   } catch (error) {

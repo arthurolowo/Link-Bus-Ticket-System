@@ -5,6 +5,8 @@ import { Label } from "./ui/label";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { useToast } from "../hooks/use-toast";
 import { getToken } from '../lib/authUtils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp";
 
 interface PaymentFormProps {
   bookingId: number;
@@ -18,7 +20,23 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
   const [provider, setProvider] = useState<'mtn' | 'airtel'>('mtn');
   const [loading, setLoading] = useState(false);
   const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [pin, setPin] = useState("");
   const { toast } = useToast();
+
+  const handlePinSubmit = async () => {
+    if (pin.length !== 4) {
+      toast({
+        title: "Invalid PIN",
+        description: "Please enter a 4-digit PIN",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setShowPinDialog(false);
+    await processPayment();
+  };
 
   const initiatePayment = async () => {
     if (!phoneNumber) {
@@ -30,6 +48,11 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
       return;
     }
 
+    // Show PIN dialog instead of proceeding directly
+    setShowPinDialog(true);
+  };
+
+  const processPayment = async () => {
     try {
       setLoading(true);
       const token = getToken();
@@ -49,7 +72,8 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
           amount,
           paymentMethod: 'mobile_money',
           provider,
-          phoneNumber
+          phoneNumber,
+          pin // Include PIN in the request
         }),
       });
 
@@ -62,8 +86,8 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
       setPaymentId(data.paymentId);
       
       toast({
-        title: "Payment Initiated",
-        description: `Please check your ${provider.toUpperCase()} phone for the payment prompt.`,
+        title: "Payment Processing",
+        description: `Your payment is being processed...`,
       });
 
       // Start polling payment status
@@ -78,6 +102,7 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
       onPaymentError();
     } finally {
       setLoading(false);
+      setPin(""); // Clear PIN after use
     }
   };
 
@@ -114,14 +139,14 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
           onPaymentComplete();
           return;
         } else if (data.status === 'failed') {
-          toast({
+        toast({
             title: "Payment Failed",
             description: "The payment could not be processed. Please try again.",
             variant: "destructive"
           });
           onPaymentError();
-          return;
-        }
+        return;
+      }
 
         // Continue polling if payment is still pending
         attempts++;
@@ -150,68 +175,64 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
   };
 
   return (
-    <div className="max-w-md mx-auto space-y-6 p-6 bg-white rounded-lg shadow-md">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2">Mobile Money Payment</h2>
-        <p className="text-gray-600">Amount to pay: UGX {Number(amount).toLocaleString()}</p>
+    <>
+      <div className="max-w-md mx-auto space-y-6 p-6 bg-white rounded-lg shadow-md">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-2">Mobile Money Payment</h2>
+          <p className="text-gray-600">Amount to pay: UGX {Number(amount).toLocaleString()}</p>
       </div>
 
-      <div className="space-y-6">
-        <div className="space-y-3">
-          <Label>Select Provider</Label>
-          <RadioGroup
-            value={provider}
-            onValueChange={(value) => setProvider(value as 'mtn' | 'airtel')}
-            className="grid grid-cols-2 gap-4"
-          >
-            <div>
-              <RadioGroupItem
-                value="mtn"
-                id="mtn"
-                className="peer sr-only"
-              />
-              <Label
-                htmlFor="mtn"
-                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-              >
-                <span className="text-xl font-bold">MTN</span>
-                <span className="text-sm text-muted-foreground">Mobile Money</span>
-              </Label>
-            </div>
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <Label>Select Provider</Label>
+            <RadioGroup
+              value={provider}
+              onValueChange={(value) => setProvider(value as 'mtn' | 'airtel')}
+              className="grid grid-cols-2 gap-4"
+            >
+                    <div>
+                <RadioGroupItem
+                  value="mtn"
+                  id="mtn"
+                  className="peer sr-only"
+                />
+                <Label
+                  htmlFor="mtn"
+                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                >
+                  <span className="text-xl font-bold">MTN</span>
+                  <span className="text-sm text-muted-foreground">Mobile Money</span>
+                </Label>
+              </div>
 
-            <div>
-              <RadioGroupItem
-                value="airtel"
-                id="airtel"
-                className="peer sr-only"
-              />
-              <Label
-                htmlFor="airtel"
-                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-              >
-                <span className="text-xl font-bold">Airtel</span>
-                <span className="text-sm text-muted-foreground">Money</span>
-              </Label>
-            </div>
-          </RadioGroup>
-        </div>
+              <div>
+                <RadioGroupItem
+                  value="airtel"
+                  id="airtel"
+                  className="peer sr-only"
+                />
+                <Label
+                  htmlFor="airtel"
+                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                >
+                  <span className="text-xl font-bold">Airtel</span>
+                  <span className="text-sm text-muted-foreground">Money</span>
+                </Label>
+              </div>
+            </RadioGroup>
+              </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="phoneNumber">Mobile Money Number</Label>
-          <Input
-            id="phoneNumber"
-            type="tel"
-            placeholder={`Enter your ${provider.toUpperCase()} number (e.g., 256${provider === 'mtn' ? '77' : '75'}1234567)`}
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-            disabled={loading || !!paymentId}
-          />
-          <p className="text-sm text-gray-500">
-            Enter your phone number in international format (e.g., 256{provider === 'mtn' ? '77' : '75'}1234567)
-          </p>
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="phoneNumber">Mobile Money Number</Label>
+            <Input
+              id="phoneNumber"
+              type="tel"
+              placeholder="Enter your phone number"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+            />
+                </div>
 
-        {!paymentId && (
           <Button
             className="w-full"
             onClick={initiatePayment}
@@ -219,25 +240,47 @@ export default function PaymentForm({ bookingId, amount, onPaymentComplete, onPa
           >
             {loading ? "Processing..." : `Pay with ${provider.toUpperCase()}`}
           </Button>
-        )}
+        </div>
+      </div>
 
-        {paymentId && (
-          <div className="text-center space-y-4">
-            <div className="animate-pulse">
-              <p className="text-lg font-semibold">Waiting for payment confirmation...</p>
-              <p className="text-sm text-gray-600">Please complete the payment on your phone</p>
-            </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => window.location.reload()}
-            >
-              Cancel Payment
-            </Button>
-          </div>
-        )}
+      <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enter Mobile Money PIN</DialogTitle>
+            <DialogDescription>
+              Please enter your {provider.toUpperCase()} Mobile Money PIN to authorize the payment of UGX {Number(amount).toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center space-y-4">
+            <InputOTP
+              maxLength={4}
+              value={pin}
+              onChange={setPin}
+              render={({ slots }) => (
+                <InputOTPGroup className="gap-2">
+                  {slots.map((slot, index) => (
+                    <InputOTPSlot
+                      key={index}
+                      index={index}
+                      {...slot}
+                      className="w-12 h-12 text-2xl"
+                    />
+                  ))}
+                </InputOTPGroup>
+              )}
+            />
+            <div className="flex gap-2 justify-end w-full">
+              <Button variant="outline" onClick={() => setShowPinDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handlePinSubmit} disabled={pin.length !== 4}>
+                Confirm Payment
+              </Button>
       </div>
     </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
