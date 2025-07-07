@@ -39,19 +39,20 @@ const router = Router();
 router.get('/', async (req, res) => {
   try {
     console.log('GET /api/trips - Fetching all trips');
-    const results = await db
+    const { busType } = req.query;
+
+    const query = db
       .select()
       .from(trips)
       .innerJoin(routes, eq(trips.routeId, routes.id))
       .innerJoin(buses, eq(trips.busId, buses.id))
       .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .where(busType && busType !== 'all' ? eq(busTypes.name, busType as string) : undefined)
       .orderBy(trips.departureDate, trips.departureTime);
 
-    console.log('Raw query results:', results);
+    const results = await query;
     
     const formattedTrips = results.map(formatTripResult);
-    console.log('Formatted trips:', formattedTrips);
-    
     res.json(formattedTrips);
   } catch (error) {
     console.error('Error fetching trips:', error);
