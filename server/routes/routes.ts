@@ -58,8 +58,9 @@ router.post('/', auth, async (req, res) => {
     const existingRoute = await db
       .select()
       .from(routes)
-      .where(sql`LOWER(${routes.origin}) = LOWER(${origin})`)
-      .where(sql`LOWER(${routes.destination}) = LOWER(${destination})`);
+      .where(
+        sql`LOWER(${routes.origin}) = LOWER(${origin}) AND LOWER(${routes.destination}) = LOWER(${destination})`
+      );
 
     if (existingRoute.length > 0) {
       return res.status(400).json({ message: 'Route already exists' });

@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { UGANDAN_CITIES, UgandanCity } from '../types';
-import { Clock, MapPin } from 'lucide-react';
+import { UgandanCity } from '../types';
+import { Clock, MapPin, Bus, ArrowRight, Loader2 } from 'lucide-react';
 import { SearchForm } from "../components/SearchForm";
+import { motion, AnimatePresence } from "framer-motion";
+import { Skeleton } from '../components/ui/skeleton';
 
 interface Route {
   id: number;
@@ -19,10 +18,25 @@ interface Route {
   isActive: number;
 }
 
+const fadeInUp = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.5 }
+};
+
+const staggerContainer = {
+  animate: {
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [popularRoutes, setPopularRoutes] = useState<Route[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchParams, setSearchParams] = useState({
     from: '' as UgandanCity,
     to: '' as UgandanCity,
@@ -33,40 +47,28 @@ export default function Home() {
   useEffect(() => {
     const fetchPopularRoutes = async () => {
       try {
-        console.log('Fetching popular routes...');
+        setIsLoading(true);
         const response = await fetch('http://localhost:5000/api/routes');
         if (!response.ok) {
           throw new Error(`Failed to fetch routes: ${response.status} ${response.statusText}`);
         }
         const data = await response.json();
-        console.log('All routes:', data);
         
-        // Get major routes (longer distance routes)
         const majorRoutes = data
-          .filter((route: Route) => {
-            console.log('Checking route:', route);
-            return route.isActive && route.distance > 200;
-          })
+          .filter((route: Route) => route.isActive && route.distance > 200)
           .sort((a: Route, b: Route) => b.distance - a.distance)
-          .slice(0, 4);
+          .slice(0, 6);
         
-        console.log('Popular routes:', majorRoutes);
         setPopularRoutes(majorRoutes);
       } catch (error) {
         console.error('Error fetching popular routes:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchPopularRoutes();
   }, []);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchParams.from || !searchParams.to || !searchParams.date) {
-      return;
-    }
-    navigate('/search-results', { state: searchParams });
-  };
 
   const handleQuickBook = (route: Route) => {
     navigate('/search-results', {
@@ -80,150 +82,231 @@ export default function Home() {
   };
 
   return (
+    <AnimatePresence>
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section with Search */}
-      <section className="relative bg-blue-600 text-white py-20">
-        <div className="container mx-auto px-4">
+        <section className="relative bg-gradient-to-br from-blue-600 to-blue-800 text-white py-24 overflow-hidden">
+          <div className="absolute inset-0 bg-[url('/public/bus-pattern.svg')] opacity-10"></div>
+          <motion.div 
+            className="container mx-auto px-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
           <div className="max-w-4xl mx-auto text-center mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Travel Across Uganda with Comfort
+              <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
+                Your Journey Begins Here
             </h1>
-            <p className="text-xl opacity-90">
-              Book your bus tickets online for a seamless journey across major cities
-            </p>
+              <p className="text-xl md:text-2xl opacity-90 mb-8">
+                Book bus tickets online for a seamless journey across Uganda
+              </p>
+              {user ? (
+                <p className="text-lg mb-8">
+                  Welcome back, {user.name}! Ready for your next adventure?
+                </p>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  className="bg-white text-blue-600 hover:bg-blue-50"
+                  onClick={() => navigate('/login')}
+                >
+                  Sign in for exclusive deals
+                </Button>
+              )}
       </div>
 
-          <div className="max-w-2xl mx-auto">
-            <Card className="shadow-lg">
+            <motion.div 
+              className="max-w-2xl mx-auto"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <Card className="shadow-xl backdrop-blur-sm bg-white/95">
               <SearchForm />
             </Card>
-          </div>
-              </div>
+            </motion.div>
+          </motion.div>
       </section>
 
       {/* Features Section */}
-      <section className="py-16">
+        <motion.section 
+          className="py-20"
+          variants={staggerContainer}
+          initial="initial"
+          whileInView="animate"
+          viewport={{ once: true }}
+        >
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center p-6">
+              <motion.div 
+                className="text-center p-6 rounded-xl hover:bg-white hover:shadow-lg transition-all duration-300"
+                variants={fadeInUp}
+              >
               <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                  <Clock className="h-8 w-8 text-blue-600" />
               </div>
               <h3 className="text-xl font-semibold mb-2">Quick Booking</h3>
               <p className="text-gray-600">Book your tickets in minutes with our easy-to-use platform</p>
-              </div>
+              </motion.div>
 
-            <div className="text-center p-6">
+              <motion.div 
+                className="text-center p-6 rounded-xl hover:bg-white hover:shadow-lg transition-all duration-300"
+                variants={fadeInUp}
+              >
               <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
+                  <Bus className="h-8 w-8 text-blue-600" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Secure Travel</h3>
-              <p className="text-gray-600">Safe and comfortable travel with experienced drivers</p>
-              </div>
+                <h3 className="text-xl font-semibold mb-2">Modern Fleet</h3>
+                <p className="text-gray-600">Travel in comfort with our well-maintained modern buses</p>
+              </motion.div>
 
-            <div className="text-center p-6">
+              <motion.div 
+                className="text-center p-6 rounded-xl hover:bg-white hover:shadow-lg transition-all duration-300"
+                variants={fadeInUp}
+              >
               <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
+                  <MapPin className="h-8 w-8 text-blue-600" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">24/7 Support</h3>
-              <p className="text-gray-600">Customer support available round the clock</p>
+                <h3 className="text-xl font-semibold mb-2">Wide Coverage</h3>
+                <p className="text-gray-600">Extensive network covering all major cities in Uganda</p>
+              </motion.div>
             </div>
           </div>
-        </div>
-      </section>
+        </motion.section>
 
       {/* Popular Routes Section */}
-      <section className="py-16 bg-white">
+        <section className="py-20 bg-white">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Popular Routes</h2>
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold mb-4">Popular Routes</h2>
+              <p className="text-gray-600 max-w-2xl mx-auto">
+                Discover our most traveled routes with daily departures and competitive prices
+              </p>
+            </div>
+
+            {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <Card key={i} className="p-6">
+                    <Skeleton className="h-6 w-3/4 mb-4" />
+                    <Skeleton className="h-4 w-1/2 mb-2" />
+                    <div className="flex justify-between items-center mt-4">
+                      <Skeleton className="h-4 w-1/4" />
+                      <Skeleton className="h-8 w-1/3" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <motion.div 
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                variants={staggerContainer}
+                initial="initial"
+                whileInView="animate"
+                viewport={{ once: true }}
+              >
             {popularRoutes.map((route) => (
-              <Card key={route.id} className="p-6 hover:shadow-lg transition-shadow">
-                <div className="flex justify-between items-center mb-4">
+                  <motion.div
+                    key={route.id}
+                    variants={fadeInUp}
+                  >
+                    <Card 
+                      className="p-6 hover:shadow-lg transition-all duration-300 cursor-pointer group"
+                      onClick={() => handleQuickBook(route)}
+                    >
+                      <div className="flex justify-between items-start mb-4">
                     <div>
-                    <h3 className="font-semibold text-lg">{route.origin} → {route.destination}</h3>
-                    <p className="text-gray-600">Daily Departures</p>
+                          <h3 className="font-semibold text-lg group-hover:text-blue-600 transition-colors">
+                            {route.origin} → {route.destination}
+                          </h3>
+                          <div className="flex items-center text-gray-600 mt-2">
+                            <Clock className="h-4 w-4 mr-2" />
+                            <span>{Math.round(route.estimatedDuration)} hours</span>
+                          </div>
                       </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-500">Starting from</p>
-                    <p className="text-lg font-semibold text-blue-600">UGX {Math.round(route.distance / 1000)}</p>
+                          <p className="text-lg font-semibold text-blue-600">
+                            UGX {new Intl.NumberFormat().format(Math.round(route.distance * 100))}
+                          </p>
                   </div>
                 </div>
+                      <div className="flex items-center text-blue-600 text-sm font-medium">
+                        Book now
+                        <ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                      </div>
               </Card>
+                  </motion.div>
             ))}
-          </div>
+              </motion.div>
+            )}
         </div>
       </section>
 
       {/* Why Choose Us Section */}
-      <section className="py-16 bg-gray-50">
+        <section className="py-20 bg-gray-50">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Why Choose Us</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Modern Fleet</h3>
-                <p className="text-gray-600">Well-maintained buses with modern amenities for your comfort</p>
-              </div>
-            </div>
+            <motion.div 
+              className="text-center mb-12"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <h2 className="text-3xl font-bold mb-4">Why Choose Us</h2>
+              <p className="text-gray-600 max-w-2xl mx-auto">
+                Experience the best in bus travel with our premium services and customer-first approach
+              </p>
+            </motion.div>
 
-            <div className="flex gap-4">
+            <motion.div 
+              className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto"
+              variants={staggerContainer}
+              initial="initial"
+              whileInView="animate"
+              viewport={{ once: true }}
+            >
+              {[
+                {
+                  icon: <Bus className="h-6 w-6 text-blue-600" />,
+                  title: "Modern Fleet",
+                  description: "Well-maintained buses with modern amenities for your comfort"
+                },
+                {
+                  icon: <Clock className="h-6 w-6 text-blue-600" />,
+                  title: "Punctual Service",
+                  description: "Reliable departure times and efficient journey planning"
+                },
+                {
+                  icon: <MapPin className="h-6 w-6 text-blue-600" />,
+                  title: "Strategic Routes",
+                  description: "Direct connections between major cities with convenient stops"
+                },
+                {
+                  icon: <Loader2 className="h-6 w-6 text-blue-600" />,
+                  title: "24/7 Support",
+                  description: "Round-the-clock customer service for your peace of mind"
+                }
+              ].map((feature, index) => (
+                <motion.div 
+                  key={index}
+                  className="flex gap-4 p-6 rounded-xl hover:bg-white hover:shadow-lg transition-all duration-300"
+                  variants={fadeInUp}
+                >
               <div className="flex-shrink-0">
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                      {feature.icon}
                 </div>
               </div>
               <div>
-                <h3 className="text-lg font-semibold mb-2">Competitive Prices</h3>
-                <p className="text-gray-600">Best value for money with transparent pricing</p>
+                    <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
+                    <p className="text-gray-600">{feature.description}</p>
               </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Fast & Efficient</h3>
-                <p className="text-gray-600">Direct routes with minimal stops for faster travel</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Safe Journey</h3>
-                <p className="text-gray-600">Professional drivers and regular vehicle maintenance</p>
-              </div>
-            </div>
+                </motion.div>
+              ))}
+            </motion.div>
           </div>
+        </section>
       </div>
-      </section>
-    </div>
+    </AnimatePresence>
   );
 }

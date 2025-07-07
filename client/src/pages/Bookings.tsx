@@ -17,6 +17,9 @@ import {
 } from "../components/ui/alert-dialog";
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Badge } from '../components/ui/badge';
+import { Skeleton } from '../components/ui/skeleton';
+import { Calendar, Clock, MapPin, Bus, CreditCard, CalendarDays } from 'lucide-react';
 
 interface BookingResponse {
   booking: {
@@ -133,15 +136,38 @@ export default function Bookings() {
     }
   }, [user, navigate, toast]);
 
+  const LoadingSkeleton = () => (
+    <div className="space-y-4">
+      {[1, 2, 3].map((i) => (
+        <Card key={i} className="w-full">
+          <CardHeader>
+            <Skeleton className="h-6 w-3/4" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-4 w-1/3" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+
   if (!user) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto py-8 px-4">
         <Card className="p-6 text-center">
-          <h2 className="text-xl font-semibold mb-4">Login Required</h2>
-          <p className="mb-4">Please login to view your bookings.</p>
-          <Button onClick={() => navigate('/login')}>
-            Login
-          </Button>
+          <CardHeader>
+            <CardTitle className="text-2xl">Login Required</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">Please login to view your bookings.</p>
+            <Button onClick={() => navigate('/login')} size="lg">
+              Login
+            </Button>
+          </CardContent>
         </Card>
       </div>
     );
@@ -149,28 +175,22 @@ export default function Bookings() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto py-8">
-        <div className="text-center">Loading your bookings...</div>
+      <div className="container mx-auto py-8 px-4">
+        <h1 className="text-3xl font-bold mb-6">My Bookings</h1>
+        <LoadingSkeleton />
       </div>
     );
   }
 
   if (queryError) {
     return (
-      <div className="container mx-auto py-8">
-        <div className="text-red-500 text-center">
-          Error loading bookings: {queryError instanceof Error ? queryError.message : 'Unknown error'}
-        </div>
-      </div>
-    );
-  }
-
-  if (tripId && tripError) {
-    return (
-      <div className="container mx-auto py-8">
-        <div className="text-red-500 text-center">
-          Error loading trip details. Please try again.
-        </div>
+      <div className="container mx-auto py-8 px-4">
+        <Card className="p-6 border-red-200 bg-red-50">
+          <div className="flex items-center gap-2 text-red-600">
+            <span className="text-lg">Error loading bookings: </span>
+            <span>{queryError instanceof Error ? queryError.message : 'Unknown error'}</span>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -255,192 +275,143 @@ export default function Bookings() {
     }
   };
 
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return 'default';
+      case 'pending':
+        return 'secondary';
+      case 'cancelled':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">My Bookings</h1>
-        <p className="text-gray-600">View and manage your bus ticket bookings</p>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-          {error}
-        </div>
-      )}
-
-      {(!bookingsData || bookingsData.length === 0) && (
-        <Card className="p-6 text-center">
-          <p className="text-gray-500">You don't have any bookings yet.</p>
-          <Button className="mt-4" onClick={() => navigate('/trips')}>
-            Book a Trip
-          </Button>
+    <div className="container mx-auto py-8 px-4">
+      <h1 className="text-3xl font-bold mb-6">My Bookings</h1>
+      
+      {(!bookingsData || bookingsData.length === 0) ? (
+        <Card className="p-8 text-center">
+          <CardContent className="space-y-4">
+            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold">No Bookings Found</h3>
+            <p className="text-muted-foreground">You haven't made any bookings yet.</p>
+            <Button onClick={() => navigate('/trips')} className="mt-4">
+              Browse Available Trips
+            </Button>
+          </CardContent>
         </Card>
-      )}
-
-      <div className="space-y-4">
-        {bookingsData?.map(({ booking, trip }) => (
-          <Card key={booking.id} className="p-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              <div>
-                <div className="flex justify-between items-start mb-4">
+      ) : (
+        <div className="grid gap-6">
+          {bookingsData.map((booking) => (
+            <Card key={booking.booking.id} className="overflow-hidden">
+              <CardHeader className="border-b bg-muted/10">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <h3 className="text-lg font-semibold">
-                      {trip.route.origin} → {trip.route.destination}
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      {new Date(trip.departureDate).toLocaleDateString()}
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-lg font-semibold">Booking #{booking.booking.bookingReference}</h3>
+                      <Badge variant={getStatusBadgeVariant(booking.booking.paymentStatus)}>
+                        {booking.booking.paymentStatus}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Booked on {new Date(booking.booking.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm ${
-                      booking.paymentStatus === 'completed' ? 'bg-green-100 text-green-800' :
-                      booking.paymentStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
-                    </span>
+                    <p className="text-xl font-bold">UGX {parseInt(booking.booking.totalAmount).toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground">Total Amount</p>
                   </div>
                 </div>
+              </CardHeader>
 
-                <div className="space-y-2">
-                  <p>
-                    <span className="font-medium">Booking Reference: </span>
-                    {booking.bookingReference}
-                  </p>
-                  <p>
-                    <span className="font-medium">Seat Number: </span>
-                    {booking.seatNumber}
-                  </p>
-                  <p>
-                    <span className="font-medium">Bus: </span>
-                    {trip.bus.busType.name} ({trip.bus.busNumber})
-                  </p>
-                </div>
-              </div>
+              <CardContent className="pt-6">
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-primary" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Route</p>
+                        <p className="font-medium">{booking.trip.route.origin} → {booking.trip.route.destination}</p>
+                      </div>
+                    </div>
 
-              <div>
-                <div className="space-y-2">
-                  <p>
-                    <span className="font-medium">Departure: </span>
-                    {trip.departureTime}
-                  </p>
-                  <p>
-                    <span className="font-medium">Arrival: </span>
-                    {trip.arrivalTime}
-                  </p>
-                  <p>
-                    <span className="font-medium">Amount: </span>
-                    UGX {parseInt(booking.totalAmount).toLocaleString()}
-                  </p>
-                  <p>
-                    <span className="font-medium">Booked on: </span>
-                    {new Date(booking.createdAt).toLocaleString()}
-                  </p>
-                </div>
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="w-5 h-5 text-primary" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Departure Date</p>
+                        <p className="font-medium">{formatDate(booking.trip.departureDate)}</p>
+                      </div>
+                    </div>
 
-                {booking.paymentStatus === 'pending' && (
-                  <div className="mt-4 space-x-2">
-                    <Button variant="destructive" onClick={() => handleCancelBooking(booking.id)}>
-                      Cancel Booking
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-primary" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Time</p>
+                        <p className="font-medium">{booking.trip.departureTime} - {booking.trip.arrivalTime}</p>
+                      </div>
+                    </div>
                   </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Bus className="w-5 h-5 text-primary" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Bus Details</p>
+                        <p className="font-medium">{booking.trip.bus.busType.name} - {booking.trip.bus.busNumber}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-primary" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Seat Number</p>
+                        <p className="font-medium">#{booking.booking.seatNumber}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+
+              <CardFooter className="border-t bg-muted/10 flex justify-end gap-4 mt-6">
+                {booking.booking.paymentStatus !== 'cancelled' && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive">Cancel Booking</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to cancel this booking? This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleCancelBooking(booking.booking.id)}>
+                          Yes, Cancel Booking
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {tripId && trip && (
-        <>
-          <Card className="p-6 mt-6">
-            <h2 className="text-xl font-semibold mb-4">Book Your Trip</h2>
-            <div className="grid gap-6 md:grid-cols-2">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Trip Details</h3>
-                <div className="space-y-2">
-                  <p>
-                    <span className="font-medium">Route: </span>
-                    {trip.route.origin} → {trip.route.destination}
-                  </p>
-                  <p>
-                    <span className="font-medium">Date: </span>
-                    {new Date(trip.departureDate).toLocaleDateString()}
-                  </p>
-                  <p>
-                    <span className="font-medium">Departure: </span>
-                    {trip.departureTime}
-                  </p>
-                  <p>
-                    <span className="font-medium">Arrival: </span>
-                    {trip.arrivalTime}
-                  </p>
-                  <p>
-                    <span className="font-medium">Bus Type: </span>
-                    {trip.bus.busType.name}
-                  </p>
-                  <p>
-                    <span className="font-medium">Bus Number: </span>
-                    {trip.bus.busNumber}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Booking Details</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Number of Seats
-                    </label>
-                    <select
-                      className="w-full p-2 border rounded-md"
-                      value={selectedSeats}
-                      onChange={(e) => setSelectedSeats(parseInt(e.target.value))}
-                    >
-                      {[...Array(Math.min(5, trip.availableSeats))].map((_, i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1} {i === 0 ? 'seat' : 'seats'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <p className="text-lg font-medium">
-                      Price per seat: UGX {parseInt(trip.price).toLocaleString()}
-                    </p>
-                    <p className="text-xl font-bold mt-2">
-                      Total: UGX {(parseInt(trip.price) * selectedSeats).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <Button 
-                    className="w-full mt-4" 
-                    onClick={handleBooking}
-                    disabled={trip.availableSeats < 1}
-                  >
-                    {trip.availableSeats < 1 ? 'No Seats Available' : 'Confirm Booking'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6 mt-6">
-            <h2 className="text-xl font-semibold mb-4">Bus Features</h2>
-            <div className="flex flex-wrap gap-2">
-              {trip.bus.busType.amenities?.map((amenity, index) => (
-                <span
-                  key={index}
-                  className="text-sm bg-gray-100 text-gray-600 px-3 py-1 rounded-full"
-                >
-                  {amenity}
-                </span>
-              ))}
-            </div>
-          </Card>
-        </>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );
