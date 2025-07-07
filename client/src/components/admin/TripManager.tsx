@@ -85,7 +85,6 @@ const tripFormSchema = z.object({
   departureDate: z.string().min(1, 'Departure date is required'),
   departureTime: z.string().min(1, 'Departure time is required'),
   arrivalTime: z.string().min(1, 'Arrival time is required'),
-  price: z.string().min(1, 'Price is required'),
   status: z.string().default('scheduled'),
 });
 
@@ -105,7 +104,6 @@ export function TripManager() {
       departureDate: '',
       departureTime: '',
       arrivalTime: '',
-      price: '',
       status: 'scheduled',
     },
   });
@@ -300,7 +298,6 @@ export function TripManager() {
       departureDate: trip.departureDate,
       departureTime: trip.departureTime,
       arrivalTime: trip.arrivalTime,
-      price: trip.price,
       status: trip.status,
     });
     setIsAddDialogOpen(true);
@@ -331,11 +328,11 @@ export function TripManager() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Trips & Schedules</CardTitle>
+        <CardTitle>Manage Trips</CardTitle>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button>
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               Add Trip
             </Button>
           </DialogTrigger>
@@ -343,9 +340,7 @@ export function TripManager() {
             <DialogHeader>
               <DialogTitle>{editingTrip ? 'Edit Trip' : 'Add New Trip'}</DialogTitle>
               <DialogDescription>
-                {editingTrip 
-                  ? 'Edit the trip details below.' 
-                  : 'Fill in the details below to add a new trip.'}
+                {editingTrip ? 'Edit trip details below.' : 'Enter trip details below. Price will be automatically calculated based on route distance and bus type.'}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -355,23 +350,23 @@ export function TripManager() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Route</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
+                    <FormControl>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a route" />
+                          <SelectValue placeholder="Select route" />
                         </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {routes?.map((route) => (
-                          <SelectItem key={route.id} value={route.id.toString()}>
-                            {route.origin} → {route.destination} ({route.distance}km)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                        <SelectContent>
+                          {routes?.map((route) => (
+                            <SelectItem key={route.id} value={route.id.toString()}>
+                              {route.origin} → {route.destination}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -382,23 +377,23 @@ export function TripManager() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Bus</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
+                    <FormControl>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a bus" />
+                          <SelectValue placeholder="Select bus" />
                         </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {buses?.map((bus) => (
-                          <SelectItem key={bus.id} value={bus.id.toString()}>
-                            {bus.busNumber} - {bus.busType.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                        <SelectContent>
+                          {buses?.map((bus) => (
+                            <SelectItem key={bus.id} value={bus.id.toString()}>
+                              {bus.busNumber} ({bus.busType.name})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -437,23 +432,6 @@ export function TripManager() {
                     <FormLabel>Arrival Time</FormLabel>
                     <FormControl>
                       <Input type="time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Price (UGX)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        placeholder="Enter price" 
-                        {...field}
-                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -513,20 +491,131 @@ export function TripManager() {
                     </Button>
                   </>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleEdit(trip)}
-                >
-                  <Edit className="w-4 h-4" />
-                </Button>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="icon">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Edit Trip</DialogTitle>
+                      <DialogDescription>
+                        Edit trip details below. Price will be automatically calculated based on route distance and bus type.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="routeId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Route</FormLabel>
+                            <FormControl>
+                              <Select
+                                value={field.value}
+                                onValueChange={field.onChange}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select route" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {routes?.map((route) => (
+                                    <SelectItem key={route.id} value={route.id.toString()}>
+                                      {route.origin} → {route.destination}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="busId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Bus</FormLabel>
+                            <FormControl>
+                              <Select
+                                value={field.value}
+                                onValueChange={field.onChange}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select bus" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {buses?.map((bus) => (
+                                    <SelectItem key={bus.id} value={bus.id.toString()}>
+                                      {bus.busNumber} ({bus.busType.name})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="departureDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Departure Date</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="departureTime"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Departure Time</FormLabel>
+                            <FormControl>
+                              <Input type="time" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="arrivalTime"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Arrival Time</FormLabel>
+                            <FormControl>
+                              <Input type="time" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <DialogFooter>
+                        <Button 
+                          type="submit" 
+                          disabled={addTripMutation.isPending || updateTripMutation.isPending}
+                        >
+                          {addTripMutation.isPending || updateTripMutation.isPending ? 'Saving...' : 'Save Trip'}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
                 {trip.status !== 'completed' && (
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => handleDelete(trip.id)}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 )}
               </div>

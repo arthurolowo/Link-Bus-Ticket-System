@@ -6,11 +6,15 @@ import { auth } from '../middleware/auth.js';
 
 const router = Router();
 
-// Get all bus types
-router.get('/types', auth, async (req, res) => {
+// Get all bus types (public endpoint)
+router.get('/types', async (req, res) => {
   try {
-    const allBusTypes = await db.select().from(busTypes);
-    res.json(allBusTypes);
+    const types = await db
+      .select()
+      .from(busTypes)
+      .orderBy(busTypes.name);
+
+    res.json(types);
   } catch (error) {
     console.error('Error fetching bus types:', error);
     res.status(500).json({ message: 'Server error' });
@@ -112,18 +116,19 @@ router.delete('/types/:id', auth, async (req, res) => {
   }
 });
 
-// Get all buses
-router.get('/', async (req, res) => {
+// Get all buses (admin only)
+router.get('/', auth, async (req, res) => {
   try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
     const allBuses = await db
-      .select({
-        id: buses.id,
-        busNumber: buses.busNumber,
-        isActive: buses.isActive,
-        busType: busTypes
-      })
+      .select()
       .from(buses)
-      .leftJoin(busTypes, eq(buses.busTypeId, busTypes.id));
+      .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .orderBy(buses.busNumber);
+
     res.json(allBuses);
   } catch (error) {
     console.error('Error fetching buses:', error);

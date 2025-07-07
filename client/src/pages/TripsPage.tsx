@@ -6,6 +6,7 @@ import { Card } from '../components/ui/card';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/use-toast';
 import { apiRequest } from '../lib/queryClient';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 interface Trip {
   id: number;
@@ -30,6 +31,14 @@ interface Trip {
   };
 }
 
+interface BusType {
+  id: number;
+  name: string;
+  description: string;
+  amenities: string[];
+  totalSeats: number;
+}
+
 export default function TripsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -37,7 +46,22 @@ export default function TripsPage() {
   const [searchParams, setSearchParams] = useState({
     origin: '',
     destination: '',
-    date: ''
+    date: '',
+    busType: 'all'
+  });
+
+  // Fetch bus types
+  const { data: busTypes } = useQuery<BusType[]>({
+    queryKey: ['busTypes'],
+    queryFn: async () => {
+      const response = await fetch('http://localhost:5000/api/buses/types', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    }
   });
 
   const { data: trips, isLoading, error } = useQuery<Trip[]>({
@@ -45,7 +69,10 @@ export default function TripsPage() {
     queryFn: async () => {
       try {
         if (searchParams.origin && searchParams.destination && searchParams.date) {
-          const params = new URLSearchParams(searchParams);
+          const params = new URLSearchParams({
+            ...searchParams,
+            busType: searchParams.busType === 'all' ? '' : searchParams.busType
+          });
           const response = await fetch(`http://localhost:5000/api/trips/search?${params}`, {
             credentials: 'include'
           });
@@ -73,6 +100,13 @@ export default function TripsPage() {
     }
   });
 
+  const handleBusTypeChange = (value: string) => {
+    setSearchParams(prev => ({
+      ...prev,
+      busType: value
+    }));
+  };
+
   const handleBookTrip = (tripId: number) => {
     if (!user) {
       toast({
@@ -92,7 +126,8 @@ export default function TripsPage() {
     setSearchParams({
       origin: urlParams.get('origin') || '',
       destination: urlParams.get('destination') || '',
-      date: urlParams.get('date') || ''
+      date: urlParams.get('date') || '',
+      busType: urlParams.get('busType') || 'all'
     });
   }, []);
 
@@ -114,6 +149,24 @@ export default function TripsPage() {
     <div className="container mx-auto py-8">
       <h1 className="text-3xl font-bold mb-6">Available Trips</h1>
       
+      <div className="mb-6">
+        <div className="flex items-center gap-4">
+          <Select value={searchParams.busType} onValueChange={handleBusTypeChange}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select bus type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All bus types</SelectItem>
+              {busTypes?.map((type) => (
+                <SelectItem key={type.id} value={type.name}>
+                  {type.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       {trips?.length === 0 && (
         <div className="text-center py-8">
           <p className="text-gray-500">No trips found for the selected criteria.</p>

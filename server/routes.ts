@@ -28,6 +28,11 @@ router.use('/auth', authRouter);
 router.use('/trips', tripsRouter);
 router.use('/routes', routesRouter);
 router.use('/buses', busesRouter);
+router.use('/bus-types', (req, res, next) => {
+  // Rewrite the path to use the /types endpoint in busesRouter
+  req.url = '/types' + req.url;
+  next();
+}, busesRouter);
 router.use('/bookings', bookingsRouter);
 router.use('/payments', paymentsRoutes);
 

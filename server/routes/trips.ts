@@ -4,6 +4,7 @@ import { trips, routes, buses, busTypes, bookings } from '../schema.js';
 import { eq, and, gte, sql } from 'drizzle-orm';
 import { auth } from '../middleware/auth.js';
 import { tripSchema } from '../schema.js';
+import { calculateTripPrice } from '../utils/booking.js';
 
 interface SearchResult {
   id: number;
@@ -156,7 +157,10 @@ router.post('/', auth, async (req, res) => {
     const tripData = req.body;
     
     // Validate trip data
-    const validationResult = tripSchema.safeParse(tripData);
+    const validationResult = tripSchema.safeParse({
+      ...tripData,
+      price: '0' // Temporary price, will be calculated
+    });
     if (!validationResult.success) {
       return res.status(400).json({ 
         message: 'Invalid trip data', 
@@ -203,11 +207,15 @@ router.post('/', auth, async (req, res) => {
     // Set initial available seats from bus type
     const availableSeats = bus[0].bus_types.totalSeats;
 
+    // Calculate price based on route and bus type
+    const price = await calculateTripPrice(tripData.routeId, tripData.busId);
+
     // Add new trip
     const newTrip = await db
       .insert(trips)
       .values({
         ...tripData,
+        price,
         availableSeats,
         status: 'scheduled'
       })
@@ -231,7 +239,10 @@ router.put('/:id', auth, async (req, res) => {
     const tripData = req.body;
 
     // Validate trip data
-    const validationResult = tripSchema.safeParse(tripData);
+    const validationResult = tripSchema.safeParse({
+      ...tripData,
+      price: '0' // Temporary price, will be calculated
+    });
     if (!validationResult.success) {
       return res.status(400).json({ 
         message: 'Invalid trip data', 
@@ -259,10 +270,16 @@ router.put('/:id', auth, async (req, res) => {
       });
     }
 
+    // Calculate price based on route and bus type
+    const price = await calculateTripPrice(tripData.routeId, tripData.busId);
+
     // Update trip
     const updatedTrip = await db
       .update(trips)
-      .set(tripData)
+      .set({
+        ...tripData,
+        price
+      })
       .where(eq(trips.id, parseInt(id)))
       .returning();
 
