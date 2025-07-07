@@ -7,6 +7,8 @@ import { useToast } from '../hooks/use-toast';
 import { useAuth } from '../hooks/useAuth';
 import { getToken } from '../lib/authUtils';
 import PaymentForm from '../components/PaymentForm';
+import { Checkbox } from '../components/ui/checkbox';
+import { ScrollArea } from '../components/ui/scroll-area';
 
 interface Trip {
   id: number;
@@ -37,7 +39,7 @@ export default function NewBooking() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
+  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
   const [bookingId, setBookingId] = useState<number | null>(null);
   const [showPayment, setShowPayment] = useState(false);
 
@@ -72,6 +74,30 @@ export default function NewBooking() {
     }
   }, [user, navigate, toast]);
 
+  const handleSeatToggle = (seatNumber: number) => {
+    setSelectedSeats(prev => {
+      if (prev.includes(seatNumber)) {
+        return prev.filter(seat => seat !== seatNumber);
+      } else {
+        if (prev.length >= 5) {
+          toast({
+            title: "Maximum Seats",
+            description: "You can only book up to 5 seats at once",
+            variant: "destructive"
+          });
+          return prev;
+        }
+        return [...prev, seatNumber].sort((a, b) => a - b);
+      }
+    });
+  };
+
+  const calculateTotalAmount = () => {
+    if (!trip) return "0.00";
+    const total = selectedSeats.length * parseFloat(trip.price);
+    return total.toFixed(2);
+  };
+
   if (isLoading) {
     return (
       <div className="container mx-auto py-8">
@@ -92,10 +118,10 @@ export default function NewBooking() {
 
   const handleBooking = async () => {
     try {
-      if (!selectedSeat) {
+      if (selectedSeats.length === 0) {
         toast({
-          title: "Seat Required",
-          description: "Please select a seat number",
+          title: "Seats Required",
+          description: "Please select at least one seat",
           variant: "destructive"
         });
         return;
@@ -122,8 +148,8 @@ export default function NewBooking() {
         credentials: 'include',
         body: JSON.stringify({
           tripId: parseInt(tripId!),
-          seatNumber: selectedSeat,
-          totalAmount: trip.price
+          seatNumbers: selectedSeats,
+          totalAmount: calculateTotalAmount().toString()
         }),
       });
 
@@ -171,7 +197,7 @@ export default function NewBooking() {
       {showPayment && bookingId ? (
         <PaymentForm
           bookingId={bookingId}
-          amount={trip.price}
+          amount={calculateTotalAmount().toString()}
           onPaymentComplete={handlePaymentSuccess}
           onPaymentError={handlePaymentCancel}
           passengerDetails={{
@@ -179,7 +205,7 @@ export default function NewBooking() {
             phone: user?.phone || '',
             email: user?.email || ''
           }}
-          selectedSeats={[selectedSeat?.toString() || '']}
+          selectedSeats={selectedSeats.map(seat => seat.toString())}
           tripDetails={{
             origin: trip.route.origin,
             destination: trip.route.destination,
@@ -218,37 +244,54 @@ export default function NewBooking() {
                   {trip.bus.busNumber}
                 </p>
                 <p>
-                  <span className="font-medium">Price: </span>
+                  <span className="font-medium">Price per seat: </span>
                   UGX {Number(trip.price).toLocaleString()}
                 </p>
+                {selectedSeats.length > 0 && (
+                  <p className="text-lg font-semibold text-primary">
+                    Total Amount: UGX {Number(calculateTotalAmount()).toLocaleString()}
+                  </p>
+                )}
               </div>
             </div>
 
             <div>
-              <h2 className="text-xl font-semibold mb-4">Booking Details</h2>
+              <h2 className="text-xl font-semibold mb-4">Select Seats</h2>
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Select Seat Number</label>
-                  <select
-                    className="w-full p-2 border rounded-md"
-                    value={selectedSeat || ''}
-                    onChange={(e) => setSelectedSeat(Number(e.target.value))}
-                  >
-                    <option value="">Choose a seat</option>
+                <p className="text-sm text-muted-foreground">
+                  Select up to 5 seats. Selected seats: {selectedSeats.join(', ')}
+                </p>
+                <ScrollArea className="h-[200px] w-full rounded-md border p-4">
+                  <div className="grid grid-cols-5 gap-4">
                     {Array.from({ length: trip.availableSeats }, (_, i) => i + 1).map((seat) => (
-                      <option key={seat} value={seat}>
-                        Seat {seat}
-                      </option>
+                      <div
+                        key={seat}
+                        className="flex items-center space-x-2"
+                      >
+                        <Checkbox
+                          id={`seat-${seat}`}
+                          checked={selectedSeats.includes(seat)}
+                          onCheckedChange={() => handleSeatToggle(seat)}
+                        />
+                        <label
+                          htmlFor={`seat-${seat}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {seat}
+                        </label>
+                      </div>
                     ))}
-                  </select>
-                </div>
+                  </div>
+                </ScrollArea>
 
                 <Button
                   className="w-full"
                   onClick={handleBooking}
-                  disabled={!selectedSeat}
+                  disabled={selectedSeats.length === 0}
                 >
-                  Proceed to Payment
+                  {selectedSeats.length > 0
+                    ? `Book ${selectedSeats.length} seat${selectedSeats.length > 1 ? 's' : ''} - UGX ${Number(calculateTotalAmount()).toLocaleString()}`
+                    : 'Select seats to book'}
                 </Button>
               </div>
             </div>

@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { busTypes, buses, routes, trips, users, bookings } from './schema.js';
+import { busTypes, buses, routes, trips, users, bookings, seats } from './schema.js';
 import { type Trip, type InsertBooking } from './schema.js';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
@@ -18,6 +18,7 @@ const db = drizzle(pool);
 async function seed() {
   try {
     // Clear existing data
+    await db.delete(seats);
     await db.delete(bookings);
     await db.delete(trips);
     await db.delete(buses);
@@ -39,6 +40,19 @@ async function seed() {
     }).returning();
 
     console.log('✅ Admin user created');
+
+    // Insert regular test user
+    const [testUser] = await db.insert(users).values({
+      id: uuidv4(),
+      name: 'Test User',
+      email: 'test@example.com',
+      password: await bcrypt.hash('test123', 10),
+      phone: '+256700000001',
+      is_admin: false,
+      is_verified: true,
+    }).returning();
+
+    console.log('✅ Test user created');
 
     // Insert 3 bus types
     const busTypesData = await db.insert(busTypes).values([
@@ -141,8 +155,8 @@ async function seed() {
     
     for (let i = 0; i < 15; i++) {
       const dayOffset = Math.floor(i / 3); // Spread 3 trips per day over 5 days
-      const tripDate = new Date(today);
-      tripDate.setDate(today.getDate() + dayOffset);
+      const tripDate = new Date();
+      tripDate.setDate(today.getDate() + dayOffset + 1); // Start from tomorrow
       
       const routeIndex = i % routesData.length;
       const busIndex = i % busesData.length;
@@ -166,16 +180,16 @@ async function seed() {
       const price = Math.ceil((distance * baseRate) / 1000) * 1000;
 
       tripsList.push({
-          routeId: route.id,
+        routeId: route.id,
         busId: bus.id,
         departureDate: tripDate.toISOString().split('T')[0],
         departureTime,
         arrivalTime,
         price: price.toString(),
         availableSeats: busTypesData.find(bt => bt.id === bus.busTypeId)?.totalSeats || 0,
-          status: 'scheduled'
-        });
-      }
+        status: 'scheduled'
+      });
+    }
 
     const tripsData = await db.insert(trips).values(tripsList).returning();
     console.log('✅ Trips created');

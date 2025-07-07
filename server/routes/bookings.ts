@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../storage.js';
-import { bookings, trips, routes, buses, busTypes, bookingSchema } from '../schema.js';
+import { bookings, trips, routes, buses, busTypes, seats, bookingSchema } from '../schema.js';
 import { eq, and, sql } from 'drizzle-orm';
 import { auth } from '../middleware/auth.js';
 import { generateBookingReference } from '../utils/booking.js';
@@ -97,6 +97,10 @@ router.post('/', auth, async (req, res) => {
     // Validate booking data
     const validationResult = bookingSchema.safeParse(bookingData);
     if (!validationResult.success) {
+      console.error('Booking validation failed:', {
+        data: bookingData,
+        errors: validationResult.error.errors
+      });
       return res.status(400).json({
         message: 'Invalid booking data',
         errors: validationResult.error.errors
@@ -114,7 +118,7 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'Invalid or unavailable trip' });
     }
 
-    // Create booking
+    // Create booking with multiple seats
     const newBooking = await db.transaction(async (tx) => {
       // Lock the trip row to prevent concurrent bookings
       const tripLock = await tx
@@ -124,58 +128,85 @@ router.post('/', auth, async (req, res) => {
         .limit(1)
         .for('update');
 
-      if (!tripLock.length || tripLock[0].availableSeats <= 0) {
-        throw new Error('No available seats');
+      if (!tripLock.length || !tripLock[0]?.availableSeats || tripLock[0].availableSeats < bookingData.seatNumbers.length) {
+        throw new Error('Not enough available seats');
       }
 
-      // Check if seat is available (within transaction)
-      const existingSeatBooking = await tx
-        .select()
-        .from(bookings)
+      // Check if any of the requested seats are already booked
+      const existingSeatBookings = await tx
+        .select({
+          seatNumber: seats.seatNumber
+        })
+        .from(seats)
+        .innerJoin(bookings, eq(seats.bookingId, bookings.id))
         .where(
           and(
             eq(bookings.tripId, bookingData.tripId),
-            eq(bookings.seatNumber, bookingData.seatNumber),
             sql`${bookings.paymentStatus} IN ('completed', 'pending')`
           )
         );
 
-      if (existingSeatBooking.length > 0) {
-        throw new Error('Seat already booked or pending payment');
+      const bookedSeats = existingSeatBookings.map(b => b.seatNumber);
+      const requestedSeats = bookingData.seatNumbers;
+      
+      const alreadyBookedSeats = requestedSeats.filter((seat: number) => bookedSeats.includes(seat));
+      if (alreadyBookedSeats.length > 0) {
+        throw new Error(`Seats ${alreadyBookedSeats.join(', ')} are already booked`);
       }
 
       // Generate booking reference
       const bookingReference = generateBookingReference();
 
       // Create the booking
-      const booking = await tx
+      const [booking] = await tx
         .insert(bookings)
         .values({
-          ...bookingData,
+          userId: req.user!.id,
+          tripId: bookingData.tripId,
           bookingReference,
+          totalAmount: bookingData.totalAmount,
           paymentStatus: 'pending',
           createdAt: new Date()
         })
         .returning();
 
+      if (!booking) {
+        throw new Error('Failed to create booking');
+      }
+
+      // Insert seat records
+      await tx
+        .insert(seats)
+        .values(
+          bookingData.seatNumbers.map((seatNumber: number) => ({
+            bookingId: booking.id,
+            seatNumber,
+            createdAt: new Date()
+          }))
+        );
+
       // Update available seats
       await tx
         .update(trips)
         .set({
-          availableSeats: sql`${trips.availableSeats} - 1`
+          availableSeats: sql`${trips.availableSeats} - ${bookingData.seatNumbers.length}`
         })
         .where(eq(trips.id, bookingData.tripId));
 
-      return booking[0];
+      return booking;
     });
 
     res.status(201).json(newBooking);
   } catch (error) {
     console.error('Error creating booking:', error);
-    if (error instanceof Error && error.message === 'Seat already booked') {
-      res.status(400).json({ message: error.message });
-    } else if (error instanceof Error && error.message === 'No available seats') {
-      res.status(400).json({ message: error.message });
+    if (error instanceof Error) {
+      if (error.message.includes('already booked')) {
+        res.status(400).json({ message: error.message });
+      } else if (error.message === 'Not enough available seats') {
+        res.status(400).json({ message: error.message });
+      } else {
+        res.status(500).json({ message: 'Server error' });
+      }
     } else {
       res.status(500).json({ message: 'Server error' });
     }

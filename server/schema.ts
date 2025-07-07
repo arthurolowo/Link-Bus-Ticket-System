@@ -70,11 +70,18 @@ export const bookings = pgTable('bookings', {
   id: serial('id').primaryKey(),
   userId: varchar('user_id', { length: 64 }).references(() => users.id),
   tripId: integer('trip_id').references(() => trips.id),
-  seatNumber: integer('seat_number'),
   bookingReference: varchar('booking_reference', { length: 32 }).notNull(),
   paymentStatus: varchar('payment_status', { length: 32 }).default('pending'),
   totalAmount: varchar('total_amount', { length: 10 }),
   qrCode: varchar('qr_code', { length: 256 }),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// SEATS TABLE
+export const seats = pgTable('seats', {
+  id: serial('id').primaryKey(),
+  bookingId: integer('booking_id').references(() => bookings.id, { onDelete: 'cascade' }),
+  seatNumber: integer('seat_number').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -135,11 +142,19 @@ export const bookingsRelations = relations(bookings, ({ one, many }) => ({
     references: [trips.id],
   }),
   payments: many(payments),
+  seats: many(seats),
 }));
 
 export const paymentsRelations = relations(payments, ({ one }) => ({
   booking: one(bookings, {
     fields: [payments.bookingId],
+    references: [bookings.id],
+  }),
+}));
+
+export const seatsRelations = relations(seats, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [seats.bookingId],
     references: [bookings.id],
   }),
 }));
@@ -159,6 +174,8 @@ export type Booking = InferModel<typeof bookings>;
 export type InsertBooking = InferModel<typeof bookings, 'insert'>;
 export type Payment = InferModel<typeof payments>;
 export type InsertPayment = InferModel<typeof payments, 'insert'>;
+export type Seat = InferModel<typeof seats>;
+export type InsertSeat = InferModel<typeof seats, 'insert'>;
 
 // Composite types with relations
 export type TripWithDetails = Trip & {
@@ -169,6 +186,7 @@ export type TripWithDetails = Trip & {
 export type BookingWithDetails = Booking & {
   trip: TripWithDetails;
   payments?: Payment[];
+  seats?: Seat[];
 };
 
 export type PaymentWithDetails = Payment & {
@@ -230,11 +248,10 @@ export const tripSchema = z.object({
 });
 
 export const bookingSchema = z.object({
-  userId: z.string().min(1).max(64),
+  userId: z.string().optional(),
   tripId: z.number().int().positive(),
-  seatNumber: z.number().int().positive(),
-  totalAmount: z.string().regex(/^\d+(\.\d{2})?$/),
-  paymentStatus: z.enum(['pending', 'completed', 'failed', 'cancelled']).optional(),
+  seatNumbers: z.array(z.number().int().positive()),
+  totalAmount: z.string(),
 });
 
 export const paymentSchema = z.object({
