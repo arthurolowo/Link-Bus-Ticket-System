@@ -40,15 +40,19 @@ export function SearchForm() {
       date: ''
     };
 
-    if (!UGANDAN_CITIES.includes(formData.from)) {
+    // Convert input to match city case exactly
+    const fromCity = UGANDAN_CITIES.find(city => city.toLowerCase() === formData.from.toLowerCase());
+    const toCity = UGANDAN_CITIES.find(city => city.toLowerCase() === formData.to.toLowerCase());
+
+    if (!fromCity) {
       newErrors.from = 'Please select a valid departure city';
     }
 
-    if (!UGANDAN_CITIES.includes(formData.to)) {
+    if (!toCity) {
       newErrors.to = 'Please select a valid destination city';
     }
 
-    if (formData.from === formData.to) {
+    if (fromCity === toCity) {
       newErrors.to = 'Destination must be different from departure';
     }
 
@@ -61,13 +65,23 @@ export function SearchForm() {
     }
 
     setErrors(newErrors);
-    return !Object.values(newErrors).some(error => error !== '');
+
+    if (!Object.values(newErrors).some(error => error !== '')) {
+      // Update form data with exact city names
+      setFormData(prev => ({
+        ...prev,
+        from: fromCity || prev.from,
+        to: toCity || prev.to
+      }));
+      return true;
+    }
+    return false;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
-      navigate('/trips', { 
+      navigate('/search-results', { 
         state: formData,
         replace: true 
       });

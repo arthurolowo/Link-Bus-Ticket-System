@@ -60,6 +60,92 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Search trips endpoint - public endpoint
+router.get('/search', async (req, res) => {
+  try {
+    const { origin, destination, date } = req.query;
+
+    console.log('Search params:', { origin, destination, date });
+
+    if (!origin || !destination || !date) {
+      const missing = [
+        !origin && 'origin',
+        !destination && 'destination',
+        !date && 'date'
+      ].filter(Boolean);
+      console.log('Missing parameters:', missing);
+      return res.status(400).json({ 
+        message: `Missing required search parameters: ${missing.join(', ')}`
+      });
+    }
+
+    // Validate route exists
+    console.log('Checking route existence:', { origin, destination });
+    const routeExists = await db
+      .select()
+      .from(routes)
+      .where(
+        sql`LOWER(${routes.origin}) = LOWER(${origin as string}) AND LOWER(${routes.destination}) = LOWER(${destination as string})`
+      );
+
+    console.log('Route exists check result:', routeExists);
+
+    if (!routeExists.length) {
+      return res.status(400).json({ 
+        message: `No route found from ${origin} to ${destination}` 
+      });
+    }
+
+    const searchDate = new Date(date as string);
+    if (isNaN(searchDate.getTime())) {
+      return res.status(400).json({ 
+        message: `Invalid date format: ${date}. Please use YYYY-MM-DD format.` 
+      });
+    }
+
+    // Ensure the search date is not in the past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (searchDate < today) {
+      return res.status(400).json({ 
+        message: 'Cannot search for trips in the past' 
+      });
+    }
+
+    const formattedDate = searchDate.toISOString().split('T')[0];
+    console.log('Formatted search date:', formattedDate);
+
+    let conditions = [
+      sql`LOWER(${routes.origin}) = LOWER(${origin as string})`,
+      sql`LOWER(${routes.destination}) = LOWER(${destination as string})`,
+      eq(trips.departureDate, formattedDate),
+      eq(trips.status, 'scheduled'),
+      sql`CONCAT(${trips.departureDate}, ' ', ${trips.departureTime}) > NOW()`
+    ];
+
+    console.log('Building search query with conditions:', conditions);
+
+    const baseQuery = db
+      .select()
+      .from(trips)
+      .innerJoin(routes, eq(trips.routeId, routes.id))
+      .innerJoin(buses, eq(trips.busId, buses.id))
+      .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
+      .where(and(...conditions));
+
+    console.log('Executing search query...');
+    const results = await baseQuery;
+    console.log('Search results:', results.length);
+
+    const searchResults = results.map(formatTripResult);
+    res.json(searchResults);
+  } catch (error) {
+    console.error('Error searching trips:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get single trip by ID - public endpoint
 router.get('/:id', async (req, res) => {
   try {
@@ -80,70 +166,6 @@ router.get('/:id', async (req, res) => {
     res.json(formatTripResult(result[0]));
   } catch (error) {
     console.error('Error fetching trip:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Search trips endpoint - public endpoint
-router.get('/search', async (req, res) => {
-  try {
-    const { origin, destination, date, minPrice, maxPrice, busType } = req.query;
-
-    if (!origin || !destination || !date) {
-      return res.status(400).json({ message: 'Missing required search parameters' });
-    }
-
-    try {
-      const searchDate = new Date(date as string);
-      if (isNaN(searchDate.getTime())) {
-        return res.status(400).json({ message: 'Invalid date format' });
-      }
-
-      // Ensure the search date is not in the past
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      if (searchDate < today) {
-        return res.status(400).json({ message: 'Cannot search for trips in the past' });
-      }
-
-      const formattedDate = searchDate.toISOString().split('T')[0];
-
-      let conditions = [
-        sql`LOWER(${routes.origin}) = LOWER(${origin as string})`,
-        sql`LOWER(${routes.destination}) = LOWER(${destination as string})`,
-        eq(trips.departureDate, formattedDate),
-        eq(trips.status, 'scheduled'),
-        sql`CONCAT(${trips.departureDate}, ' ', ${trips.departureTime}) > NOW()`
-      ];
-
-      if (minPrice) {
-        conditions.push(gte(trips.price, minPrice as string));
-      }
-      if (maxPrice) {
-        conditions.push(sql`CAST(${trips.price} AS DECIMAL) <= ${maxPrice}`);
-      }
-      if (busType) {
-        conditions.push(eq(busTypes.name, busType as string));
-      }
-
-      const baseQuery = db
-        .select()
-        .from(trips)
-        .innerJoin(routes, eq(trips.routeId, routes.id))
-        .innerJoin(buses, eq(trips.busId, buses.id))
-        .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
-        .where(and(...conditions));
-
-      const results = await baseQuery;
-      const searchResults = results.map(formatTripResult);
-      res.json(searchResults);
-    } catch (error) {
-      console.error('Error processing date or executing query:', error);
-      return res.status(400).json({ message: 'Invalid search parameters' });
-    }
-  } catch (error) {
-    console.error('Error searching trips:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

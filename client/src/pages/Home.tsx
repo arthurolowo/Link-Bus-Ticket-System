@@ -1,22 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { UgandanCity } from '../types';
-import { Clock, MapPin, Bus, ArrowRight, Loader2 } from 'lucide-react';
+import { Clock, MapPin, Bus, Loader2 } from 'lucide-react';
 import { SearchForm } from "../components/SearchForm";
 import { motion, AnimatePresence } from "framer-motion";
-import { Skeleton } from '../components/ui/skeleton';
-
-interface Route {
-  id: number;
-  origin: string;
-  destination: string;
-  distance: number;
-  estimatedDuration: number;
-  isActive: number;
-}
 
 const fadeInUp = {
   initial: { opacity: 0, y: 20 },
@@ -35,51 +25,12 @@ const staggerContainer = {
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [popularRoutes, setPopularRoutes] = useState<Route[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchParams, setSearchParams] = useState({
+  const [searchParams] = useState({
     from: '' as UgandanCity,
     to: '' as UgandanCity,
     date: new Date().toISOString().split('T')[0],
     passengers: '1',
   });
-
-  useEffect(() => {
-    const fetchPopularRoutes = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch('http://localhost:5000/api/routes');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch routes: ${response.status} ${response.statusText}`);
-        }
-        const data = await response.json();
-        
-        const majorRoutes = data
-          .filter((route: Route) => route.isActive && route.distance > 200)
-          .sort((a: Route, b: Route) => b.distance - a.distance)
-          .slice(0, 6);
-        
-        setPopularRoutes(majorRoutes);
-      } catch (error) {
-        console.error('Error fetching popular routes:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchPopularRoutes();
-  }, []);
-
-  const handleQuickBook = (route: Route) => {
-    navigate('/search-results', {
-      state: {
-        from: route.origin,
-        to: route.destination,
-        date: searchParams.date,
-        passengers: '1'
-      }
-    });
-  };
 
   return (
     <AnimatePresence>
@@ -113,7 +64,7 @@ export default function Home() {
                   Sign in for exclusive deals
                 </Button>
               )}
-      </div>
+          </div>
 
             <motion.div 
               className="max-w-2xl mx-auto"
@@ -122,8 +73,8 @@ export default function Home() {
               transition={{ delay: 0.3 }}
             >
               <Card className="shadow-xl backdrop-blur-sm bg-white/95">
-              <SearchForm />
-            </Card>
+                <SearchForm />
+              </Card>
             </motion.div>
           </motion.div>
       </section>
@@ -173,75 +124,6 @@ export default function Home() {
             </div>
           </div>
         </motion.section>
-
-      {/* Popular Routes Section */}
-        <section className="py-20 bg-white">
-        <div className="container mx-auto px-4">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold mb-4">Popular Routes</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Discover our most traveled routes with daily departures and competitive prices
-              </p>
-            </div>
-
-            {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <Card key={i} className="p-6">
-                    <Skeleton className="h-6 w-3/4 mb-4" />
-                    <Skeleton className="h-4 w-1/2 mb-2" />
-                    <div className="flex justify-between items-center mt-4">
-                      <Skeleton className="h-4 w-1/4" />
-                      <Skeleton className="h-8 w-1/3" />
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <motion.div 
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                variants={staggerContainer}
-                initial="initial"
-                whileInView="animate"
-                viewport={{ once: true }}
-              >
-            {popularRoutes.map((route) => (
-                  <motion.div
-                    key={route.id}
-                    variants={fadeInUp}
-                  >
-                    <Card 
-                      className="p-6 hover:shadow-lg transition-all duration-300 cursor-pointer group"
-                      onClick={() => handleQuickBook(route)}
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                    <div>
-                          <h3 className="font-semibold text-lg group-hover:text-blue-600 transition-colors">
-                            {route.origin} → {route.destination}
-                          </h3>
-                          <div className="flex items-center text-gray-600 mt-2">
-                            <Clock className="h-4 w-4 mr-2" />
-                            <span>{Math.round(route.estimatedDuration)} hours</span>
-                          </div>
-                      </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500">Starting from</p>
-                          <p className="text-lg font-semibold text-blue-600">
-                            UGX {new Intl.NumberFormat().format(Math.round(route.distance * 100))}
-                          </p>
-                  </div>
-                </div>
-                      <div className="flex items-center text-blue-600 text-sm font-medium">
-                        Book now
-                        <ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                      </div>
-              </Card>
-                  </motion.div>
-            ))}
-              </motion.div>
-            )}
-        </div>
-      </section>
 
       {/* Why Choose Us Section */}
         <section className="py-20 bg-gray-50">
