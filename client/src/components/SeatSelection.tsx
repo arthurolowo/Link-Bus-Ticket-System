@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import PaymentForm from "./PaymentForm";
 import { getToken } from "../lib/authUtils";
 import { formatCurrency } from '../lib/utils';
+import { useToast } from "../hooks/use-toast";
 
 interface Seat {
   id: string;
@@ -45,6 +46,7 @@ interface Trip {
 export default function SeatSelection() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const tripData = location.state as Trip;
 
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
@@ -57,6 +59,41 @@ export default function SeatSelection() {
     email: "",
   });
   const [showPayment, setShowPayment] = useState(false);
+  const [bookingId, setBookingId] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchSeats = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      const token = getToken();
+      const response = await fetch(`http://localhost:5000/api/trips/${tripData.id}/seats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch seats');
+      }
+
+      const data = await response.json();
+      setSeats(data);
+
+      // If any of our selected seats are no longer available, deselect them
+      setSelectedSeats(prev => prev.filter(seatId => {
+        const seat = data.find((s: Seat) => s.id === seatId);
+        return seat && seat.status === 'available';
+      }));
+    } catch (error) {
+      console.error('Error fetching seats:', error);
+      if (!seats.length) { // Only show error if we don't have any seats data
+        setError('Failed to load seats. Please try again.');
+      }
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, [tripData.id, seats.length]);
 
   useEffect(() => {
     if (!tripData) {
@@ -64,32 +101,13 @@ export default function SeatSelection() {
       return;
     }
 
-    const fetchSeats = async () => {
-      try {
-        setLoading(true);
-        const token = getToken();
-        const response = await fetch(`http://localhost:5000/api/trips/${tripData.id}/seats`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch seats');
-        }
-
-        const data = await response.json();
-        setSeats(data);
-      } catch (error) {
-        console.error('Error fetching seats:', error);
-        setError('Failed to load seats. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchSeats();
-  }, [tripData, navigate]);
+
+    // Refresh seats every 30 seconds
+    const refreshInterval = setInterval(fetchSeats, 30000);
+
+    return () => clearInterval(refreshInterval);
+  }, [tripData, navigate, fetchSeats]);
 
   const handleBack = () => {
     navigate(-1);
@@ -109,9 +127,67 @@ export default function SeatSelection() {
     });
   };
 
-  const handleProceedToPayment = () => {
+  const handleProceedToPayment = async () => {
     if (selectedSeats.length > 0 && passengerDetails.name && passengerDetails.phone) {
-      setShowPayment(true);
+      try {
+        const token = getToken();
+        if (!token) {
+          toast({
+            title: "Authentication Error",
+            description: "Please login again",
+            variant: "destructive"
+          });
+          navigate('/login');
+          return;
+        }
+
+        // Create booking first
+        const response = await fetch('http://localhost:5000/api/bookings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            tripId: tripData.id,
+            seatNumber: parseInt(selectedSeats[0]), // For now just use first seat
+            totalAmount: (selectedSeats.length * parseFloat(tripData.price) + 2000).toString()
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          if (error.message === 'Seat already booked') {
+            // Refresh seats to show updated availability
+            await fetchSeats();
+            toast({
+              title: "Seat No Longer Available",
+              description: "The selected seat was just booked by someone else. Please select another seat.",
+              variant: "destructive"
+            });
+            return;
+          }
+          throw new Error(error.message || 'Failed to create booking');
+        }
+
+        const booking = await response.json();
+        console.log('Created booking:', booking);
+        setBookingId(booking.id);
+        setShowPayment(true);
+        
+        toast({
+          title: "Booking Created",
+          description: "Please complete the payment to confirm your booking.",
+        });
+      } catch (error) {
+        console.error('Booking error:', error);
+        toast({
+          title: "Booking Failed",
+          description: error instanceof Error ? error.message : "Failed to create booking",
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -140,13 +216,24 @@ export default function SeatSelection() {
     );
   }
 
-  if (showPayment) {
+  if (showPayment && bookingId) {
     return (
       <PaymentForm
-        bookingId={parseInt(tripData.id.toString())}
-        amount={selectedSeats.length * parseFloat(tripData.price) + 2000 + ''}
+        bookingId={bookingId}
+        amount={(selectedSeats.length * parseFloat(tripData.price) + 2000).toString()}
         onPaymentComplete={() => navigate('/bookings')}
-        onPaymentError={() => setShowPayment(false)}
+        onPaymentError={() => {
+          setShowPayment(false);
+          setBookingId(null);
+        }}
+        passengerDetails={passengerDetails}
+        selectedSeats={selectedSeats}
+        tripDetails={{
+          origin: tripData.route.origin,
+          destination: tripData.route.destination,
+          departureDate: tripData.departureDate,
+          departureTime: tripData.departureTime
+        }}
       />
     );
   }

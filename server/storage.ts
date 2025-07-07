@@ -6,6 +6,12 @@ import {
   trips,
   bookings,
   payments,
+  usersRelations,
+  routesRelations,
+  busTypesRelations,
+  busesRelations,
+  tripsRelations,
+  bookingsRelations,
   paymentsRelations,
   type DBUser,
   type UpsertUser,
@@ -21,6 +27,9 @@ import {
   type Booking,
   type InsertBooking,
   type BookingWithDetails,
+  type Payment,
+  type InsertPayment,
+  type PaymentWithDetails,
 } from "./schema.js";
 import 'dotenv/config';
 import { Pool } from 'pg';
@@ -45,7 +54,13 @@ export const db = drizzle(pool, {
     trips, 
     bookings, 
     payments,
-    paymentsRelations 
+    usersRelations,
+    routesRelations,
+    busTypesRelations,
+    busesRelations,
+    tripsRelations,
+    bookingsRelations,
+    paymentsRelations
   } 
 });
 

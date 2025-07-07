@@ -117,4 +117,40 @@ router.get('/me', auth, (req: AuthRequest, res: Response) => {
   res.json(req.user);
 });
 
+// Verify password
+router.post('/verify-password', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+
+    // Get user from database to get current password hash
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, req.user.id));
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password || '');
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid password' });
+    }
+
+    res.json({ message: 'Password verified' });
+  } catch (error) {
+    console.error('Password verification error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 export default router; 

@@ -34,7 +34,7 @@ export default function Home() {
     const fetchPopularRoutes = async () => {
       try {
         console.log('Fetching popular routes...');
-        const response = await fetch('/api/routes');
+        const response = await fetch('http://localhost:5000/api/routes');
         if (!response.ok) {
           throw new Error(`Failed to fetch routes: ${response.status} ${response.statusText}`);
         }

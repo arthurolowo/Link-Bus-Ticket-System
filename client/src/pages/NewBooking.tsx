@@ -112,9 +112,7 @@ export default function NewBooking() {
         return;
       }
 
-      // Format totalAmount to match the required format (e.g., "1000.00")
-      const formattedAmount = Number(trip.price).toFixed(2);
-
+      // Create booking
       const response = await fetch('http://localhost:5000/api/bookings', {
         method: 'POST',
         headers: {
@@ -123,9 +121,9 @@ export default function NewBooking() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          tripId: trip.id,
+          tripId: parseInt(tripId!),
           seatNumber: selectedSeat,
-          totalAmount: formattedAmount
+          totalAmount: trip.price
         }),
       });
 
@@ -135,6 +133,7 @@ export default function NewBooking() {
       }
 
       const booking = await response.json();
+      console.log('Created booking:', booking);
       setBookingId(booking.id);
       setShowPayment(true);
       
@@ -143,6 +142,7 @@ export default function NewBooking() {
         description: `Please complete the payment to confirm your booking.`,
       });
     } catch (error) {
+      console.error('Booking error:', error);
       toast({
         title: "Booking Failed",
         description: error instanceof Error ? error.message : "Failed to create booking",
@@ -171,9 +171,21 @@ export default function NewBooking() {
       {showPayment && bookingId ? (
         <PaymentForm
           bookingId={bookingId}
-          amount={Number(trip.price).toFixed(2)}
+          amount={trip.price}
           onPaymentComplete={handlePaymentSuccess}
           onPaymentError={handlePaymentCancel}
+          passengerDetails={{
+            name: user?.name || '',
+            phone: user?.phone || '',
+            email: user?.email || ''
+          }}
+          selectedSeats={[selectedSeat?.toString() || '']}
+          tripDetails={{
+            origin: trip.route.origin,
+            destination: trip.route.destination,
+            departureDate: trip.departureDate,
+            departureTime: trip.departureTime
+          }}
         />
       ) : (
         <Card className="p-6 mb-6">
@@ -205,6 +217,10 @@ export default function NewBooking() {
                   <span className="font-medium">Bus Number: </span>
                   {trip.bus.busNumber}
                 </p>
+                <p>
+                  <span className="font-medium">Price: </span>
+                  UGX {Number(trip.price).toLocaleString()}
+                </p>
               </div>
             </div>
 
@@ -212,31 +228,23 @@ export default function NewBooking() {
               <h2 className="text-xl font-semibold mb-4">Booking Details</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Select Seat Number
-                  </label>
+                  <label className="block text-sm font-medium mb-1">Select Seat Number</label>
                   <select
                     className="w-full p-2 border rounded-md"
                     value={selectedSeat || ''}
-                    onChange={(e) => setSelectedSeat(parseInt(e.target.value))}
+                    onChange={(e) => setSelectedSeat(Number(e.target.value))}
                   >
                     <option value="">Choose a seat</option>
-                    {Array.from({ length: trip.availableSeats }, (_, i) => (
-                      <option key={i + 1} value={i + 1}>
-                        Seat {i + 1}
+                    {Array.from({ length: trip.availableSeats }, (_, i) => i + 1).map((seat) => (
+                      <option key={seat} value={seat}>
+                        Seat {seat}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div>
-                  <p className="text-lg font-medium">
-                    Price: UGX {parseInt(trip.price).toLocaleString()}
-                  </p>
-                </div>
-
-                <Button 
-                  className="w-full" 
+                <Button
+                  className="w-full"
                   onClick={handleBooking}
                   disabled={!selectedSeat}
                 >

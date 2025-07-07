@@ -114,33 +114,47 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'Invalid or unavailable trip' });
     }
 
-    // Check if seat is available
-    const existingSeatBooking = await db
-      .select()
-      .from(bookings)
-      .where(
-        and(
-          eq(bookings.tripId, bookingData.tripId),
-          eq(bookings.seatNumber, bookingData.seatNumber)
-        )
-      );
-
-    if (existingSeatBooking.length > 0) {
-      return res.status(400).json({ message: 'Seat already booked' });
-    }
-
-    // Generate booking reference
-    const bookingReference = generateBookingReference();
-
     // Create booking
     const newBooking = await db.transaction(async (tx) => {
+      // Lock the trip row to prevent concurrent bookings
+      const tripLock = await tx
+        .select()
+        .from(trips)
+        .where(eq(trips.id, bookingData.tripId))
+        .limit(1)
+        .for('update');
+
+      if (!tripLock.length || tripLock[0].availableSeats <= 0) {
+        throw new Error('No available seats');
+      }
+
+      // Check if seat is available (within transaction)
+      const existingSeatBooking = await tx
+        .select()
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.tripId, bookingData.tripId),
+            eq(bookings.seatNumber, bookingData.seatNumber),
+            sql`${bookings.paymentStatus} IN ('completed', 'pending')`
+          )
+        );
+
+      if (existingSeatBooking.length > 0) {
+        throw new Error('Seat already booked or pending payment');
+      }
+
+      // Generate booking reference
+      const bookingReference = generateBookingReference();
+
       // Create the booking
       const booking = await tx
         .insert(bookings)
         .values({
           ...bookingData,
           bookingReference,
-          paymentStatus: 'pending'
+          paymentStatus: 'pending',
+          createdAt: new Date()
         })
         .returning();
 
@@ -158,7 +172,13 @@ router.post('/', auth, async (req, res) => {
     res.status(201).json(newBooking);
   } catch (error) {
     console.error('Error creating booking:', error);
-    res.status(500).json({ message: 'Server error' });
+    if (error instanceof Error && error.message === 'Seat already booked') {
+      res.status(400).json({ message: error.message });
+    } else if (error instanceof Error && error.message === 'No available seats') {
+      res.status(400).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: 'Server error' });
+    }
   }
 });
 

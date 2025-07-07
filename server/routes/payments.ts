@@ -1,10 +1,10 @@
-import { Router } from 'express';
-import { db } from '../storage';
-import { auth } from '../middleware/auth';
-import { eq } from 'drizzle-orm';
-import { payments, bookings } from '../schema';
-import axios from 'axios';
+import { Router, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import { db } from '../storage.js';
+import { payments, bookings, users, trips, paymentSchema } from '../schema.js';
+import { eq, sql } from 'drizzle-orm';
+import { auth, AuthRequest, generateToken } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -23,60 +23,128 @@ const simulatePayment = async (paymentId: string, amount: string, provider: stri
   const success = Math.random() < 0.9;
   
   if (success) {
-    await db.update(payments)
-      .set({ 
-        status: 'completed', 
-        updatedAt: new Date(),
-        paymentDetails: JSON.stringify({
-          transactionId: `${provider.toUpperCase()}-${Date.now()}`,
-          status: 'SUCCESSFUL',
-          amount,
-          currency: 'UGX',
-          reason: 'Payment completed successfully'
+    try {
+      // First find the payment
+      const [payment] = await db
+        .select()
+        .from(payments)
+        .where(eq(payments.id, paymentId));
+
+      if (!payment) {
+        throw new Error('Payment not found');
+      }
+
+      // Update payment status
+      await db.update(payments)
+        .set({ 
+          status: 'completed', 
+          updatedAt: new Date(),
+          paymentDetails: JSON.stringify({
+            transactionId: `${provider.toUpperCase()}-${Date.now()}`,
+            status: 'SUCCESSFUL',
+            amount,
+            currency: 'UGX',
+            reason: 'Payment completed successfully'
+          })
         })
-      })
-      .where(eq(payments.id, paymentId));
+        .where(eq(payments.id, paymentId));
 
-    // Update booking status
-    const payment = await db.query.payments.findFirst({
-      where: eq(payments.id, paymentId)
-    });
-
-    if (payment) {
+      // Update booking status
       await db.update(bookings)
         .set({ paymentStatus: 'completed' })
         .where(eq(bookings.id, payment.bookingId));
-    }
 
-    return true;
+      return true;
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      return false;
+    }
   } else {
-    await db.update(payments)
-      .set({ 
-        status: 'failed', 
-        updatedAt: new Date(),
-        paymentDetails: JSON.stringify({
-          status: 'FAILED',
-          reason: 'Insufficient funds or network error'
+    try {
+      // Update payment status to failed
+      await db.update(payments)
+        .set({ 
+          status: 'failed', 
+          updatedAt: new Date(),
+          paymentDetails: JSON.stringify({
+            status: 'FAILED',
+            reason: 'Insufficient funds or network error'
+          })
         })
-      })
-      .where(eq(payments.id, paymentId));
-    return false;
+        .where(eq(payments.id, paymentId));
+
+      // Get the payment to find the booking
+      const [payment] = await db
+        .select()
+        .from(payments)
+        .where(eq(payments.id, paymentId));
+
+      if (payment) {
+        // Update booking status to failed and release the seat
+        await db.transaction(async (tx) => {
+          // Update booking status
+          await tx.update(bookings)
+            .set({ paymentStatus: 'failed' })
+            .where(eq(bookings.id, payment.bookingId));
+
+          // Get the booking to find the trip
+          const [booking] = await tx
+            .select()
+            .from(bookings)
+            .where(eq(bookings.id, payment.bookingId));
+
+          if (booking) {
+            // Increment available seats back
+            await tx.update(trips)
+              .set({
+                availableSeats: sql`${trips.availableSeats} + 1`
+              })
+              .where(eq(trips.id, Number(booking.tripId)));
+          }
+        });
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      return false;
+    }
   }
 };
 
 // Initiate payment
 router.post('/initiate', auth, async (req, res) => {
   try {
-    const { bookingId, amount, paymentMethod, provider, phoneNumber, pin } = req.body;
+    const { bookingId, amount, paymentMethod, provider, phoneNumber, password } = req.body;
 
-    // Validate required fields
-    if (!bookingId || !amount || !paymentMethod || !provider || !phoneNumber || !pin) {
-      return res.status(400).json({ message: 'Missing required payment information' });
+    // Validate payment data
+    const validationResult = paymentSchema.safeParse({
+      bookingId,
+      amount,
+      paymentMethod,
+      phoneNumber
+    });
+
+    if (!validationResult.success) {
+      return res.status(400).json({
+        message: 'Invalid payment data',
+        errors: validationResult.error.errors
+      });
     }
 
-    // Validate PIN format
-    if (!/^\d{4}$/.test(pin)) {
-      return res.status(400).json({ message: 'Invalid PIN format' });
+    // Verify user's password
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, req.user!.id));
+
+    if (!user || !user.password) {
+      return res.status(401).json({ message: 'User not found or invalid password' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid password' });
     }
 
     // Validate phone number format (Uganda)
@@ -88,12 +156,10 @@ router.post('/initiate', auth, async (req, res) => {
     }
 
     // Validate booking exists and belongs to user
-    const booking = await db.query.bookings.findFirst({
-      where: eq(bookings.id, bookingId),
-      with: {
-        trip: true
-      }
-    });
+    const [booking] = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.id, bookingId));
 
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
@@ -107,25 +173,27 @@ router.post('/initiate', auth, async (req, res) => {
     const paymentId = uuidv4();
     const externalReference = `LB-${paymentId.slice(0, 8)}`;
 
-    await db.insert(payments).values({
+    const [newPayment] = await db.insert(payments).values({
       id: paymentId,
-      bookingId,
+      bookingId: bookingId,
       amount,
       paymentMethod: `${provider}_mobile_money`,
       status: 'pending',
       externalReference,
       phoneNumber,
-      createdAt: new Date()
-    });
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
 
-    // Simulate payment processing
+    // Start payment simulation
     simulatePayment(paymentId, amount, provider)
       .catch(error => {
         console.error('Payment simulation error:', error);
       });
 
     return res.json({
-      paymentId,
+      paymentId: newPayment.id,
+      bookingReference: booking.bookingReference,
       status: 'pending',
       message: `Payment initiated. Processing ${provider.toUpperCase()} Mobile Money payment...`
     });
@@ -143,22 +211,29 @@ router.get('/:paymentId/status', auth, async (req, res) => {
     const { paymentId } = req.params;
 
     // Get payment details
-    const payment = await db.query.payments.findFirst({
-      where: eq(payments.id, paymentId),
-      with: {
-        booking: true
-      }
-    });
+    const [payment] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.id, paymentId));
 
     if (!payment) {
       return res.status(404).json({ message: 'Payment not found' });
     }
 
-    if (payment.booking.userId !== req.user!.id) {
+    // Get booking to verify ownership
+    const [booking] = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.id, payment.bookingId));
+
+    if (!booking || booking.userId !== req.user!.id) {
       return res.status(403).json({ message: 'Unauthorized access to payment' });
     }
 
-    return res.json({ status: payment.status });
+    return res.json({ 
+      status: payment.status,
+      paymentDetails: payment.paymentDetails ? JSON.parse(payment.paymentDetails) : null
+    });
   } catch (error) {
     console.error('Payment status check error:', error);
     res.status(500).json({
