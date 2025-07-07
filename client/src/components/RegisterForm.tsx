@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { useToast } from '../hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
+import { useNavigate } from 'react-router-dom';
 
 export function RegisterForm() {
   const [formData, setFormData] = useState({
@@ -17,6 +18,7 @@ export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { register } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -38,17 +40,16 @@ export function RegisterForm() {
     setIsLoading(true);
 
     try {
-      await register(formData.name, formData.email, formData.password, formData.phone);
-      toast({
-        title: 'Success',
-        description: 'Your account has been created successfully.',
-      });
+      const response = await register(formData.name, formData.email, formData.password, formData.phone);
+      // Success toast is handled by the auth hook
+      if (response.data.user.isAdmin) {
+        navigate('/admin'); // Redirect admin users to admin dashboard
+      } else {
+        navigate('/'); // Redirect regular users to home
+      }
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to register',
-        variant: 'destructive',
-      });
+      // Error toast is handled by the auth hook
+      console.error('Registration error:', error);
     } finally {
       setIsLoading(false);
     }

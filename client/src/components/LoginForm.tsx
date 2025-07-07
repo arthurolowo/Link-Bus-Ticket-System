@@ -20,22 +20,17 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const { user } = await login(email, password);
-      toast({
-        title: 'Success',
-        description: 'You have been logged in successfully.',
-      });
+      const response = await login(email, password);
       
-      // Redirect admin users to admin dashboard
-      if (user.isAdmin) {
+      // Check if user is admin after successful login
+      if (response.data.user.isAdmin) {
         navigate('/admin');
+      } else {
+        navigate('/'); // Redirect regular users to home
       }
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to login',
-        variant: 'destructive',
-      });
+      // Error toast is handled by the auth hook
+      console.error('Login error:', error);
     } finally {
       setIsLoading(false);
     }

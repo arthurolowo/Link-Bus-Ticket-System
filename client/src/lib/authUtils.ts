@@ -8,69 +8,120 @@ export interface User {
 }
 
 export interface AuthResponse {
-  token: string;
-  user: User;
+  status: 'success';
+  data: {
+    token: string;
+    expiresIn: number;
+    user: User;
+  };
+}
+
+export interface ErrorResponse {
+  status: 'error';
+  message: string;
+  code?: string;
+  errors?: Array<{ message: string }>;
 }
 
 const TOKEN_KEY = 'auth_token';
+const TOKEN_EXPIRY_KEY = 'auth_token_expiry';
 const API_BASE_URL = 'http://localhost:5000';
 
-export function setToken(token: string) {
+export function setToken(token: string, expiresIn: number) {
   localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(TOKEN_EXPIRY_KEY, (Date.now() + expiresIn * 1000).toString());
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  const token = localStorage.getItem(TOKEN_KEY);
+  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+
+  if (!token || !expiry) {
+    return null;
+  }
+
+  // Check if token is expired
+  if (Date.now() > parseInt(expiry, 10)) {
+    removeToken();
+    return null;
+  }
+
+  return token;
 }
 
 export function removeToken() {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_EXPIRY_KEY);
 }
 
 export function isAuthenticated(): boolean {
   return !!getToken();
 }
 
-export function isUnauthorizedError(error: Error): boolean {
-  return /^401: .*Unauthorized/.test(error.message);
+export function isTokenExpired(): boolean {
+  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+  if (!expiry) return true;
+  return Date.now() > parseInt(expiry, 10);
+}
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  const data = await response.json();
+  
+  if (!response.ok) {
+    const error = data as ErrorResponse;
+    throw new Error(error.message || 'An error occurred');
+  }
+  
+  return data as T;
+}
+
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers,
+  };
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    return handleResponse<T>(response);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`API request failed: ${error.message}`);
+    }
+    throw new Error('API request failed');
+  }
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  const response = await apiRequest<AuthResponse>('/api/auth/login', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({ email, password }),
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to login');
-  }
-
-  const data = await response.json();
-  setToken(data.token);
-  return data;
+  setToken(response.data.token, response.data.expiresIn);
+  return response;
 }
 
-export async function register(name: string, email: string, password: string, phone?: string): Promise<AuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+export async function register(
+  name: string, 
+  email: string, 
+  password: string, 
+  phone?: string
+): Promise<AuthResponse> {
+  const response = await apiRequest<AuthResponse>('/api/auth/register', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({ name, email, password, phone }),
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to register');
-  }
-
-  const data = await response.json();
-  setToken(data.token);
-  return data;
+  setToken(response.data.token, response.data.expiresIn);
+  return response;
 }
 
 export async function logout(): Promise<void> {
@@ -78,23 +129,38 @@ export async function logout(): Promise<void> {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  const token = getToken();
-  if (!token) return null;
-
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      removeToken();
-      return null;
-    }
-    throw new Error('Failed to get current user');
+  if (!isAuthenticated()) {
+    return null;
   }
 
-  const user = await response.json();
-  return user;
+  try {
+    const response = await apiRequest<{ status: 'success'; data: { user: User } }>('/api/auth/me');
+    return response.data.user;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('401')) {
+      removeToken();
+    }
+    return null;
+  }
+}
+
+export function parseAuthError(error: unknown): string {
+  if (error instanceof Error) {
+    // Handle specific error codes
+    if (error.message.includes('RATE_LIMIT_EXCEEDED')) {
+      return 'Too many attempts. Please try again later.';
+    }
+    if (error.message.includes('INVALID_CREDENTIALS')) {
+      return 'Invalid email or password.';
+    }
+    if (error.message.includes('EMAIL_EXISTS')) {
+      return 'This email is already registered.';
+    }
+    if (error.message.includes('TOKEN_EXPIRED')) {
+      removeToken();
+      return 'Your session has expired. Please login again.';
+    }
+    return error.message;
+  }
+  return 'An unexpected error occurred';
 }
