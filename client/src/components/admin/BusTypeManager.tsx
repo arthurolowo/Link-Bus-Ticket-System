@@ -25,8 +25,7 @@ import { useToast } from '../../hooks/use-toast';
 import { getToken } from '../../lib/authUtils';
 import { ScrollArea } from '../ui/scroll-area';
 import { Alert, AlertDescription } from '../ui/alert';
-
-const API_BASE_URL = 'http://localhost:5000';
+import { createApiUrl } from '../../config/api';
 
 interface BusType {
   id: number;
@@ -80,7 +79,7 @@ export function BusTypeManager() {
       if (!token) {
         throw new Error('Not authenticated');
       }
-      const response = await fetch(`${API_BASE_URL}/api/buses/types`, {
+      const response = await fetch(createApiUrl('/buses/types'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -97,7 +96,7 @@ export function BusTypeManager() {
   const addBusTypeMutation = useMutation({
     mutationFn: async (data: BusTypeFormData) => {
       const token = getToken();
-      const response = await fetch(`${API_BASE_URL}/api/buses/types`, {
+      const response = await fetch(createApiUrl('/buses/types'), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -130,7 +129,7 @@ export function BusTypeManager() {
   const updateBusTypeMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<BusTypeFormData> }) => {
       const token = getToken();
-      const response = await fetch(`${API_BASE_URL}/api/buses/types/${id}`, {
+      const response = await fetch(createApiUrl(`/buses/types/${id}`), {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -163,7 +162,7 @@ export function BusTypeManager() {
   const deleteBusTypeMutation = useMutation({
     mutationFn: async (id: number) => {
       const token = getToken();
-      const response = await fetch(`${API_BASE_URL}/api/buses/types/${id}`, {
+      const response = await fetch(createApiUrl(`/buses/types/${id}`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

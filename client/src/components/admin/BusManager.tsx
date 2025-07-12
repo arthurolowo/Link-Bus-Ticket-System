@@ -25,8 +25,7 @@ import { getToken } from '../../lib/authUtils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Alert, AlertDescription } from '../ui/alert';
 import { ScrollArea } from '../ui/scroll-area';
-
-const API_BASE_URL = 'http://localhost:5000';
+import { createApiUrl } from '../../config/api';
 
 interface Bus {
   id: number;
@@ -67,7 +66,7 @@ export function BusManager() {
       if (!token) {
         throw new Error('Not authenticated');
       }
-      const response = await fetch(`${API_BASE_URL}/api/buses`, {
+      const response = await fetch(createApiUrl('/buses'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -88,7 +87,7 @@ export function BusManager() {
       if (!token) {
         throw new Error('Not authenticated');
       }
-      const response = await fetch(`${API_BASE_URL}/api/buses/types`, {
+      const response = await fetch(createApiUrl('/buses/types'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -105,7 +104,7 @@ export function BusManager() {
   const addBusMutation = useMutation({
     mutationFn: async (data: BusFormData) => {
       const token = getToken();
-      const response = await fetch(`${API_BASE_URL}/api/buses`, {
+      const response = await fetch(createApiUrl('/buses'), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -138,7 +137,7 @@ export function BusManager() {
   const updateBusMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<BusFormData> }) => {
       const token = getToken();
-      const response = await fetch(`${API_BASE_URL}/api/buses/${id}`, {
+      const response = await fetch(createApiUrl(`/buses/${id}`), {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -171,7 +170,7 @@ export function BusManager() {
   const deleteBusMutation = useMutation({
     mutationFn: async (id: number) => {
       const token = getToken();
-      const response = await fetch(`${API_BASE_URL}/api/buses/${id}`, {
+      const response = await fetch(createApiUrl(`/buses/${id}`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

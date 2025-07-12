@@ -22,8 +22,24 @@ import busesRouter from './routes/buses.js';
 import bookingsRouter from './routes/bookings.js';
 import paymentsRoutes from './routes/payments';
 import adminRouter from './routes/admin.js';
+import { getSystemHealth } from './utils/health-check.js';
 
 const router = Router();
+
+// Health check endpoint for Render
+router.get('/health', async (req, res) => {
+  try {
+    const health = await getSystemHealth();
+    const statusCode = health.status === 'healthy' ? 200 : 503;
+    res.status(statusCode).json(health);
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'error', 
+      message: 'Health check failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 router.use('/auth', authRouter);
 router.use('/trips', tripsRouter);
