@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { db } from '../storage.js';
-import { bookings, trips, routes, buses, busTypes, users, seats } from '../schema.js';
+import { bookings, trips, routes, buses, busTypes, users, seats, payments } from '../schema.js';
 import { eq, and, sql, desc, count, sum, inArray } from 'drizzle-orm';
 import { auth, AuthRequest } from '../middleware/auth.js';
 
@@ -23,17 +23,29 @@ router.get('/stats', auth, requireAdmin, async (req, res) => {
     const today = new Date();
     const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
     
-    // Get total bookings and revenue for last 30 days
+    // Get total bookings for last 30 days
     const [bookingStats] = await db
       .select({
         totalBookings: count(bookings.id),
-        totalRevenue: sql<string>`COALESCE(SUM(CAST(${bookings.totalAmount} AS INTEGER)), 0)`,
       })
       .from(bookings)
       .where(
         and(
           sql`${bookings.createdAt} >= ${thirtyDaysAgo}`,
           eq(bookings.paymentStatus, 'completed')
+        )
+      );
+
+    // Get total revenue from payments table for last 30 days
+    const [revenueStats] = await db
+      .select({
+        totalRevenue: sql<string>`COALESCE(SUM(CAST(${payments.amount} AS DECIMAL)), 0)`,
+      })
+      .from(payments)
+      .where(
+        and(
+          sql`${payments.createdAt} >= ${thirtyDaysAgo}`,
+          eq(payments.status, 'completed')
         )
       );
 
@@ -65,7 +77,7 @@ router.get('/stats', auth, requireAdmin, async (req, res) => {
 
     res.json({
       totalBookings: Number(bookingStats.totalBookings),
-      totalRevenue: bookingStats.totalRevenue,
+      totalRevenue: revenueStats.totalRevenue,
       activeRoutes: Number(routeStats.activeRoutes),
       occupancyRate
     });
@@ -139,8 +151,7 @@ router.get('/bookings', auth, requireAdmin, async (req, res) => {
       id: booking.id,
       bookingReference: booking.bookingReference,
       totalAmount: booking.totalAmount,
-      paymentStatus: booking.paymentStatus,
-      bookingStatus: booking.bookingStatus,
+      status: booking.paymentStatus, // Use payment status as the main status
       createdAt: booking.createdAt,
       passengerName: booking.passengerName,
       passengerEmail: booking.passengerEmail,
@@ -228,7 +239,14 @@ router.get('/bookings/:id', auth, requireAdmin, async (req, res) => {
       .where(eq(seats.bookingId, bookingId));
 
     res.json({
-      ...booking,
+      id: booking.id,
+      bookingReference: booking.bookingReference,
+      totalAmount: booking.totalAmount,
+      status: booking.paymentStatus, // Use payment status as the main status
+      createdAt: booking.createdAt,
+      passengerName: booking.passengerName,
+      passengerEmail: booking.passengerEmail,
+      passengerPhone: booking.passengerPhone,
       seatNumbers: bookingSeats.map(s => s.seatNumber),
       trip: {
         id: booking.tripId,
@@ -340,39 +358,40 @@ router.get('/analytics', auth, requireAdmin, async (req, res) => {
     // Daily revenue for last 30 days
     const dailyRevenue = await db
       .select({
-        date: sql<string>`DATE(${bookings.createdAt})`,
-        revenue: sql<number>`COALESCE(SUM(CAST(${bookings.totalAmount} AS INTEGER)), 0)`,
-        bookings: count(bookings.id),
+        date: sql<string>`DATE(${payments.createdAt})`,
+        revenue: sql<number>`COALESCE(SUM(CAST(${payments.amount} AS DECIMAL)), 0)`,
+        bookings: count(payments.id),
       })
-      .from(bookings)
+      .from(payments)
       .where(
         and(
-          sql`${bookings.createdAt} >= ${thirtyDaysAgo}`,
-          eq(bookings.paymentStatus, 'completed')
+          sql`${payments.createdAt} >= ${thirtyDaysAgo}`,
+          eq(payments.status, 'completed')
         )
       )
-      .groupBy(sql`DATE(${bookings.createdAt})`)
-      .orderBy(sql`DATE(${bookings.createdAt})`);
+      .groupBy(sql`DATE(${payments.createdAt})`)
+      .orderBy(sql`DATE(${payments.createdAt})`);
 
     // Popular routes
     const popularRoutes = await db
       .select({
         origin: routes.origin,
         destination: routes.destination,
-        bookings: count(bookings.id),
-        revenue: sql<number>`COALESCE(SUM(CAST(${bookings.totalAmount} AS INTEGER)), 0)`,
+        bookings: count(payments.id),
+        revenue: sql<number>`COALESCE(SUM(CAST(${payments.amount} AS DECIMAL)), 0)`,
       })
       .from(routes)
       .innerJoin(trips, eq(routes.id, trips.routeId))
       .innerJoin(bookings, eq(trips.id, bookings.tripId))
+      .innerJoin(payments, eq(bookings.id, payments.bookingId))
       .where(
         and(
-          eq(bookings.paymentStatus, 'completed'),
-          sql`${bookings.createdAt} >= ${thirtyDaysAgo}`
+          eq(payments.status, 'completed'),
+          sql`${payments.createdAt} >= ${thirtyDaysAgo}`
         )
       )
       .groupBy(routes.id, routes.origin, routes.destination)
-      .orderBy(desc(count(bookings.id)))
+      .orderBy(desc(count(payments.id)))
       .limit(5);
 
     // Bus type performance
@@ -380,21 +399,22 @@ router.get('/analytics', auth, requireAdmin, async (req, res) => {
       .select({
         busType: busTypes.name,
         totalSeats: busTypes.totalSeats,
-        bookings: count(bookings.id),
-        revenue: sql<number>`COALESCE(SUM(CAST(${bookings.totalAmount} AS INTEGER)), 0)`,
+        bookings: count(payments.id),
+        revenue: sql<number>`COALESCE(SUM(CAST(${payments.amount} AS DECIMAL)), 0)`,
       })
       .from(busTypes)
       .innerJoin(buses, eq(busTypes.id, buses.busTypeId))
       .innerJoin(trips, eq(buses.id, trips.busId))
       .innerJoin(bookings, eq(trips.id, bookings.tripId))
+      .innerJoin(payments, eq(bookings.id, payments.bookingId))
       .where(
         and(
-          eq(bookings.paymentStatus, 'completed'),
-          sql`${bookings.createdAt} >= ${thirtyDaysAgo}`
+          eq(payments.status, 'completed'),
+          sql`${payments.createdAt} >= ${thirtyDaysAgo}`
         )
       )
       .groupBy(busTypes.id, busTypes.name, busTypes.totalSeats)
-      .orderBy(desc(count(bookings.id)));
+      .orderBy(desc(count(payments.id)));
 
     res.json({
       dailyRevenue,

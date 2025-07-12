@@ -7,6 +7,7 @@ import { bookings } from '../schema.js';
 import { trips } from '../schema.js';
 import { buses } from '../schema.js';
 import { busTypes } from '../schema.js';
+import { payments } from '../schema.js';
 
 const router = Router();
 
@@ -71,7 +72,7 @@ router.get('/stats', auth, async (req, res) => {
       .select({
         routeId: routes.id,
         totalBookings: sql<number>`COALESCE(COUNT(DISTINCT ${bookings.id}), 0)`,
-        totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN ${bookings.paymentStatus} = 'completed' THEN CAST(${bookings.totalAmount} AS INTEGER) ELSE 0 END), 0)`,
+        totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN ${payments.status} = 'completed' THEN CAST(${payments.amount} AS DECIMAL) ELSE 0 END), 0)`,
         upcomingTrips: sql<number>`COALESCE(COUNT(DISTINCT CASE WHEN ${trips.departureDate} >= CURRENT_DATE AND ${trips.status} = 'scheduled' THEN ${trips.id} END), 0)`,
       })
       .from(routes)
@@ -80,6 +81,7 @@ router.get('/stats', auth, async (req, res) => {
         eq(trips.id, bookings.tripId),
         sql`${bookings.createdAt} >= ${thirtyDaysAgo}`
       ))
+      .leftJoin(payments, eq(bookings.id, payments.bookingId))
       .groupBy(routes.id)
       .orderBy(routes.id);
 

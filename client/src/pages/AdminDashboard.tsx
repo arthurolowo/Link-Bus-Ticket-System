@@ -133,7 +133,6 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("all");
   const [filterPhone, setFilterPhone] = useState("");
   const [filterOrigin, setFilterOrigin] = useState("");
   const [filterDestination, setFilterDestination] = useState("");
@@ -200,11 +199,8 @@ export default function AdminDashboard() {
       booking.trip.route.origin.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.trip.route.destination.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Payment status filter
-    const matchesPaymentStatus = !filterPaymentStatus || filterPaymentStatus === 'all' || booking.paymentStatus === filterPaymentStatus;
-    
-    // Booking status filter
-    const matchesStatus = !filterStatus || filterStatus === 'all' || booking.bookingStatus === filterStatus;
+    // Status filter
+    const matchesStatus = !filterStatus || filterStatus === 'all' || booking.status === filterStatus;
     
     // Phone filter
     const matchesPhone = !filterPhone || booking.passengerPhone.includes(filterPhone);
@@ -220,7 +216,7 @@ export default function AdminDashboard() {
     const matchesStartDate = !filterStartDate || depDate >= new Date(filterStartDate);
     const matchesEndDate = !filterEndDate || depDate <= new Date(filterEndDate);
     
-    return matchesSearch && matchesPaymentStatus && matchesStatus && matchesPhone && 
+    return matchesSearch && matchesStatus && matchesPhone && 
            matchesOrigin && matchesDestination && matchesStartDate && matchesEndDate;
   });
 
@@ -235,9 +231,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleAddRouteClick = () => {
-    setActiveTab("routes");
-  };
+
 
   const handleExport = () => {
     try {
@@ -247,8 +241,7 @@ export default function AdminDashboard() {
         'Passenger Name',
         'Passenger Phone',
         'Passenger Email',
-        'Payment Status',
-        'Booking Status',
+        'Status',
         'Origin',
         'Destination',
         'Departure Date',
@@ -265,8 +258,7 @@ export default function AdminDashboard() {
         booking.passengerName,
         booking.passengerPhone,
         booking.passengerEmail,
-        booking.paymentStatus,
-        booking.bookingStatus,
+        booking.status,
         booking.trip.route.origin,
         booking.trip.route.destination,
         new Date(booking.trip.departureDate).toLocaleDateString(),
@@ -306,7 +298,6 @@ export default function AdminDashboard() {
   const clearFilters = () => {
     setSearchTerm("");
     setFilterStatus("all");
-    setFilterPaymentStatus("all");
     setFilterPhone("");
     setFilterOrigin("");
     setFilterDestination("");
@@ -324,14 +315,6 @@ export default function AdminDashboard() {
               <p className="text-muted-foreground">Manage routes, bookings, and monitor performance</p>
             </div>
             <div className="flex gap-3">
-              <Button 
-                className="btn-primary"
-                onClick={handleAddRouteClick}
-                disabled={cancelBookingMutation.isPending}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Route
-              </Button>
               <Button 
                 variant="outline"
                 onClick={handleExport}
@@ -435,92 +418,49 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5" />
-                    Recent Bookings
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isLoadingBookings ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {bookings.slice(0, 5).map((booking: AdminBooking) => (
-                        <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            {getStatusIcon(booking.bookingStatus)}
-                            <div>
-                              <p className="text-sm font-medium">{booking.passengerName}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {booking.trip.route.origin} → {booking.trip.route.destination}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-right">
-                              <p className="text-sm font-medium">UGX {formatCurrency(booking.totalAmount)}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(booking.trip.departureDate).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <Badge variant={getStatusVariant(booking.bookingStatus)}>
-                              {booking.bookingStatus}
-                            </Badge>
+            {/* Recent Bookings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Recent Bookings
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoadingBookings ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {bookings.slice(0, 5).map((booking: AdminBooking) => (
+                      <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          {getStatusIcon(booking.status)}
+                          <div>
+                            <p className="text-sm font-medium">{booking.passengerName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {booking.trip.route.origin} → {booking.trip.route.destination}
+                            </p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    Quick Actions
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <Button 
-                      className="w-full btn-primary justify-start"
-                      onClick={() => setActiveTab("routes")}
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add New Route
-                    </Button>
-                    <Button 
-                      className="w-full btn-accent justify-start"
-                      onClick={() => setActiveTab("trips")}
-                    >
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Schedule New Trip
-                    </Button>
-                    <Button 
-                      className="w-full btn-secondary justify-start"
-                      onClick={() => setActiveTab("buses")}
-                    >
-                      <Bus className="w-4 h-4 mr-2" />
-                      Manage Buses
-                    </Button>
-                    <Button 
-                      className="w-full btn-secondary justify-start"
-                      onClick={() => setActiveTab("bookings")}
-                    >
-                      <BarChart className="w-4 h-4 mr-2" />
-                      View All Bookings
-                    </Button>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <p className="text-sm font-medium">UGX {formatCurrency(booking.totalAmount)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(booking.trip.departureDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <Badge variant={getStatusVariant(booking.status)}>
+                            {booking.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="bookings" className="space-y-6">
@@ -555,30 +495,16 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="payment-status">Payment Status</Label>
-                    <Select value={filterPaymentStatus} onValueChange={setFilterPaymentStatus}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Payments" />
-                      </SelectTrigger>
-                      <SelectContent>
-                                            <SelectItem value="all">All Payments</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="booking-status">Booking Status</Label>
+                    <Label htmlFor="status">Status</Label>
                     <Select value={filterStatus} onValueChange={setFilterStatus}>
                       <SelectTrigger>
                         <SelectValue placeholder="All Statuses" />
                       </SelectTrigger>
                       <SelectContent>
-                                            <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="failed">Failed</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -645,14 +571,10 @@ export default function AdminDashboard() {
                               <div className="font-medium text-sm">UGX {formatCurrency(booking.totalAmount)}</div>
                             </td>
                             <td className="px-4 py-4">
-                              <div className="flex flex-col gap-1">
-                                <Badge variant={getStatusVariant(booking.bookingStatus)} className="text-xs">
-                                  {booking.bookingStatus}
-                                </Badge>
-                                <Badge variant={getStatusVariant(booking.paymentStatus)} className="text-xs">
-                                  {booking.paymentStatus}
-                                </Badge>
-                              </div>
+                              <Badge variant={getStatusVariant(booking.status)} className="text-xs">
+                                {getStatusIcon(booking.status)}
+                                <span className="ml-1">{booking.status}</span>
+                              </Badge>
                             </td>
                             <td className="px-4 py-4">
                               <div className="flex items-center gap-2">
@@ -663,7 +585,7 @@ export default function AdminDashboard() {
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Button>
-                                {booking.bookingStatus !== 'cancelled' && (
+                                {booking.status !== 'failed' && (
                                   <Button 
                                     variant="outline" 
                                     size="sm"
@@ -765,14 +687,10 @@ export default function AdminDashboard() {
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Status</Label>
-                    <div className="flex gap-2">
-                      <Badge variant={getStatusVariant(selectedBooking.bookingStatus)}>
-                        {selectedBooking.bookingStatus}
-                      </Badge>
-                      <Badge variant={getStatusVariant(selectedBooking.paymentStatus)}>
-                        {selectedBooking.paymentStatus}
-                      </Badge>
-                    </div>
+                    <Badge variant={getStatusVariant(selectedBooking.status)}>
+                      {getStatusIcon(selectedBooking.status)}
+                      <span className="ml-1">{selectedBooking.status}</span>
+                    </Badge>
                   </div>
                 </div>
               </div>

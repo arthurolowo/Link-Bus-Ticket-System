@@ -114,7 +114,7 @@ export function TripManager() {
     queryFn: async () => {
       const response = await fetch('http://localhost:5000/api/trips', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
       if (!response.ok) throw new Error('Failed to fetch trips');
@@ -128,7 +128,7 @@ export function TripManager() {
     queryFn: async () => {
       const response = await fetch('http://localhost:5000/api/routes', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
       if (!response.ok) throw new Error('Failed to fetch routes');
@@ -142,7 +142,7 @@ export function TripManager() {
     queryFn: async () => {
       const response = await fetch('http://localhost:5000/api/buses', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
       if (!response.ok) throw new Error('Failed to fetch buses');
@@ -156,7 +156,7 @@ export function TripManager() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
         body: JSON.stringify(data),
       });
@@ -189,7 +189,7 @@ export function TripManager() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
         body: JSON.stringify(data),
       });
@@ -221,7 +221,7 @@ export function TripManager() {
       const response = await fetch(`http://localhost:5000/api/trips/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
       });
       if (!response.ok) {
@@ -252,7 +252,7 @@ export function TripManager() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
         body: JSON.stringify({ status }),
       });
@@ -343,109 +343,111 @@ export function TripManager() {
                 {editingTrip ? 'Edit trip details below.' : 'Enter trip details below. Price will be automatically calculated based on route distance and bus type.'}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="routeId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Route</FormLabel>
-                    <FormControl>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select route" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {routes?.map((route) => (
-                            <SelectItem key={route.id} value={route.id.toString()}>
-                              {route.origin} → {route.destination}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="busId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Bus</FormLabel>
-                    <FormControl>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select bus" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {buses?.map((bus) => (
-                            <SelectItem key={bus.id} value={bus.id.toString()}>
-                              {bus.busNumber} ({bus.busType.name})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="departureDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Departure Date</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="departureTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Departure Time</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="arrivalTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Arrival Time</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button 
-                  type="submit" 
-                  disabled={addTripMutation.isPending || updateTripMutation.isPending}
-                >
-                  {addTripMutation.isPending || updateTripMutation.isPending ? 'Saving...' : 'Save Trip'}
-                </Button>
-              </DialogFooter>
-            </form>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="routeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Route</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select route" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {routes?.map((route) => (
+                              <SelectItem key={route.id} value={route.id.toString()}>
+                                {route.origin} → {route.destination}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="busId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bus</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select bus" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {buses?.map((bus) => (
+                              <SelectItem key={bus.id} value={bus.id.toString()}>
+                                {bus.busNumber} ({bus.busType.name})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="departureDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Departure Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="departureTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Departure Time</FormLabel>
+                      <FormControl>
+                        <Input type="time" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="arrivalTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Arrival Time</FormLabel>
+                      <FormControl>
+                        <Input type="time" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button 
+                    type="submit" 
+                    disabled={addTripMutation.isPending || updateTripMutation.isPending}
+                  >
+                    {addTripMutation.isPending || updateTripMutation.isPending ? 'Saving...' : 'Save Trip'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       </CardHeader>

@@ -232,6 +232,9 @@ router.post('/', auth, async (req, res) => {
 
     // Calculate price based on route and bus type
     const price = await calculateTripPrice(tripData.routeId, tripData.busId);
+    
+    // Calculate fare (for now, fare equals price)
+    const fare = price;
 
     // Add new trip
     const newTrip = await db
@@ -239,6 +242,7 @@ router.post('/', auth, async (req, res) => {
       .values({
         ...tripData,
         price,
+        fare,
         availableSeats,
         status: 'scheduled'
       })
@@ -295,13 +299,17 @@ router.put('/:id', auth, async (req, res) => {
 
     // Calculate price based on route and bus type
     const price = await calculateTripPrice(tripData.routeId, tripData.busId);
+    
+    // Calculate fare (for now, fare equals price)
+    const fare = price;
 
     // Update trip
     const updatedTrip = await db
       .update(trips)
       .set({
         ...tripData,
-        price
+        price,
+        fare
       })
       .where(eq(trips.id, parseInt(id)))
       .returning();

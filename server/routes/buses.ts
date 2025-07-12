@@ -124,7 +124,20 @@ router.get('/', auth, async (req, res) => {
     }
 
     const allBuses = await db
-      .select()
+      .select({
+        id: buses.id,
+        busNumber: buses.busNumber,
+        busTypeId: buses.busTypeId,
+        isActive: buses.isActive,
+        busType: {
+          id: busTypes.id,
+          name: busTypes.name,
+          description: busTypes.description,
+          amenities: busTypes.amenities,
+          totalSeats: busTypes.totalSeats,
+          seatLayout: busTypes.seatLayout,
+        }
+      })
       .from(buses)
       .innerJoin(busTypes, eq(buses.busTypeId, busTypes.id))
       .orderBy(buses.busNumber);
