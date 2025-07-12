@@ -9,10 +9,12 @@
     "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist/server --external:vite --external:nanoid --external:../vite.shared",
     "build": "npm run build:client && npm run build:server",
     "start": "cross-env NODE_ENV=production node dist/server/index.js",
+    "start:with-seed": "npm run seed:safe && cross-env NODE_ENV=production node dist/server/index.js",
     "postinstall": "npm run build",
     "check": "tsc",
     "db:push": "tsx scripts/manual-db-push.ts",
-    "seed": "tsx -r dotenv/config server/seed.ts"
+    "seed": "tsx -r dotenv/config server/seed.ts",
+    "seed:safe": "tsx -r dotenv/config server/seed-safe.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
