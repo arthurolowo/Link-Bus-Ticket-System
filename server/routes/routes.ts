@@ -66,6 +66,7 @@ router.get('/stats', auth, async (req, res) => {
 
     const today = new Date();
     const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+    const todayString = today.toISOString().split('T')[0]; // Convert to YYYY-MM-DD format
 
     // Get statistics for each route
     const routeStats = await db
@@ -73,13 +74,13 @@ router.get('/stats', auth, async (req, res) => {
         routeId: routes.id,
         totalBookings: sql<number>`COALESCE(COUNT(DISTINCT ${bookings.id}), 0)`,
         totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN ${payments.status} = 'completed' THEN CAST(${payments.amount} AS DECIMAL) ELSE 0 END), 0)`,
-        upcomingTrips: sql<number>`COALESCE(COUNT(DISTINCT CASE WHEN ${trips.departureDate} >= CURRENT_DATE AND ${trips.status} = 'scheduled' THEN ${trips.id} END), 0)`,
+        upcomingTrips: sql<number>`COALESCE(COUNT(DISTINCT CASE WHEN ${trips.departureDate} >= ${todayString} AND ${trips.status} = 'scheduled' THEN ${trips.id} END), 0)`,
       })
       .from(routes)
       .leftJoin(trips, eq(routes.id, trips.routeId))
       .leftJoin(bookings, and(
         eq(trips.id, bookings.tripId),
-        sql`${bookings.createdAt} >= ${thirtyDaysAgo}`
+        sql`${bookings.createdAt} >= ${thirtyDaysAgo.toISOString()}`
       ))
       .leftJoin(payments, eq(bookings.id, payments.bookingId))
       .groupBy(routes.id)
@@ -100,7 +101,7 @@ router.get('/stats', auth, async (req, res) => {
           .where(
             and(
               eq(trips.routeId, stat.routeId),
-              sql`${trips.departureDate} >= CURRENT_DATE`,
+              sql`${trips.departureDate} >= ${todayString}`,
               eq(trips.status, 'scheduled')
             )
           );
