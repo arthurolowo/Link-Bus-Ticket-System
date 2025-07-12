@@ -69,6 +69,13 @@ async function handleResponse<T>(response: Response): Promise<T> {
   
   if (!response.ok) {
     const error = data as ErrorResponse;
+    
+    // Handle validation errors with detailed messages
+    if (error.errors && Array.isArray(error.errors)) {
+      const validationMessages = error.errors.map(err => err.message).join(', ');
+      throw new Error(validationMessages);
+    }
+    
     throw new Error(error.message || 'An error occurred');
   }
   
@@ -160,6 +167,12 @@ export function parseAuthError(error: unknown): string {
       removeToken();
       return 'Your session has expired. Please login again.';
     }
+    
+    // Handle validation errors (fallback - should be handled by handleResponse now)
+    if (error.message.includes('Validation failed')) {
+      return 'Password must be at least 8 characters with uppercase, lowercase, number, and special character.';
+    }
+    
     return error.message;
   }
   return 'An unexpected error occurred';

@@ -7,6 +7,72 @@ import { generateBookingReference } from '../utils/booking.js';
 
 const router = Router();
 
+// Timeout for pending bookings (15 minutes)
+const BOOKING_TIMEOUT_MS = 15 * 60 * 1000;
+
+// Function to cancel expired bookings
+async function cancelExpiredBookings() {
+  try {
+    const expiredTime = new Date(Date.now() - BOOKING_TIMEOUT_MS);
+    
+    // Find expired pending bookings
+    const expiredBookings = await db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.paymentStatus, 'pending'),
+          sql`${bookings.createdAt} < ${expiredTime}`
+        )
+      );
+
+    if (expiredBookings.length === 0) return;
+
+    console.log(`Cancelling ${expiredBookings.length} expired bookings...`);
+
+    for (const booking of expiredBookings) {
+      await db.transaction(async (tx) => {
+        // Get all seats for this booking
+        const bookingSeats = await tx
+          .select()
+          .from(seats)
+          .where(eq(seats.bookingId, booking.id));
+
+        // Delete seat records
+        await tx
+          .delete(seats)
+          .where(eq(seats.bookingId, booking.id));
+
+        // Update booking status to cancelled
+        await tx
+          .update(bookings)
+          .set({ paymentStatus: 'cancelled' })
+          .where(eq(bookings.id, booking.id));
+
+        // Release seats back to trip
+        if (bookingSeats.length > 0 && booking.tripId) {
+          await tx
+            .update(trips)
+            .set({
+              availableSeats: sql`${trips.availableSeats} + ${bookingSeats.length}`
+            })
+            .where(eq(trips.id, booking.tripId));
+        }
+      });
+    }
+
+    console.log(`Successfully cancelled ${expiredBookings.length} expired bookings`);
+  } catch (error) {
+    console.error('Error cancelling expired bookings:', error);
+  }
+}
+
+// Run cleanup every 5 minutes
+setInterval(cancelExpiredBookings, 5 * 60 * 1000);
+
+// Also run once on startup
+cancelExpiredBookings();
+
 // Get all bookings for a user
 router.get('/my-bookings', auth, async (req, res) => {
   try {
@@ -158,6 +224,9 @@ router.post('/', auth, async (req, res) => {
       const bookingReference = generateBookingReference();
 
       // Create the booking
+      const now = new Date();
+      console.log('Creating booking with timestamp:', now.toISOString());
+      
       const [booking] = await tx
         .insert(bookings)
         .values({
@@ -166,7 +235,7 @@ router.post('/', auth, async (req, res) => {
           bookingReference,
           totalAmount: bookingData.totalAmount,
           paymentStatus: 'pending',
-          createdAt: new Date()
+          createdAt: now
         })
         .returning();
 
@@ -255,52 +324,129 @@ router.patch('/:id/payment', auth, async (req, res) => {
 router.patch('/:id/cancel', auth, async (req, res) => {
   try {
     const { id } = req.params;
+    const bookingId = parseInt(id);
 
-    const booking = await db
+    const [booking] = await db
       .select()
       .from(bookings)
-      .where(eq(bookings.id, parseInt(id)))
+      .where(eq(bookings.id, bookingId))
       .limit(1);
 
-    if (!booking.length) {
+    if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
     // Check if user owns this booking or is admin
-    if (booking[0].userId !== req.user?.id && !req.user?.isAdmin) {
+    if (booking.userId !== req.user?.id && !req.user?.isAdmin) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Only allow cancellation of pending or completed bookings
-    const status = booking[0].paymentStatus || 'unknown';
-    if (!['pending', 'completed'].includes(status)) {
-      return res.status(400).json({ message: 'Cannot cancel booking in current status' });
+    // Only allow cancellation of pending bookings
+    if (booking.paymentStatus !== 'pending') {
+      return res.status(400).json({ 
+        message: 'Only pending bookings can be cancelled' 
+      });
     }
 
-    const updatedBooking = await db.transaction(async (tx) => {
-      // Update booking status
-      const cancelled = await tx
+    // Cancel the booking and release all seats
+    const result = await db.transaction(async (tx) => {
+      // Get all seats for this booking
+      const bookingSeats = await tx
+        .select()
+        .from(seats)
+        .where(eq(seats.bookingId, bookingId));
+
+      // Delete seat records
+      await tx
+        .delete(seats)
+        .where(eq(seats.bookingId, bookingId));
+
+      // Update booking status to cancelled
+      const [cancelled] = await tx
         .update(bookings)
         .set({ paymentStatus: 'cancelled' })
-        .where(eq(bookings.id, parseInt(id)))
+        .where(eq(bookings.id, bookingId))
         .returning();
 
-      // Restore available seat if tripId exists
-      if (booking[0].tripId) {
-        await tx
-          .update(trips)
-          .set({
-            availableSeats: sql`${trips.availableSeats} + 1`
-          })
-          .where(eq(trips.id, booking[0].tripId));
-      }
+             // Release seats back to trip
+       if (bookingSeats.length > 0 && booking.tripId) {
+         await tx
+           .update(trips)
+           .set({
+             availableSeats: sql`${trips.availableSeats} + ${bookingSeats.length}`
+           })
+           .where(eq(trips.id, booking.tripId));
+       }
 
-      return cancelled[0];
+       return { booking: cancelled, releasedSeats: bookingSeats.length };
     });
 
-    res.json(updatedBooking);
+    res.json(result);
   } catch (error) {
     console.error('Error cancelling booking:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get booking timeout info
+router.get('/:id/timeout', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const bookingId = parseInt(id);
+
+    const [booking] = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.id, bookingId))
+      .limit(1);
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // Check if user owns this booking or is admin
+    if (booking.userId !== req.user?.id && !req.user?.isAdmin) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (!booking.createdAt) {
+      return res.status(400).json({ message: 'Booking has no creation date' });
+    }
+
+    const createdAt = new Date(booking.createdAt);
+    const expiresAt = new Date(createdAt.getTime() + BOOKING_TIMEOUT_MS);
+    const now = Date.now();
+    let timeRemaining = Math.max(0, expiresAt.getTime() - now);
+
+    // Cap the time remaining to the maximum timeout to prevent display issues
+    timeRemaining = Math.min(timeRemaining, BOOKING_TIMEOUT_MS);
+
+    // Debug logging
+    const ageSinceCreation = now - createdAt.getTime();
+    console.log('Booking timeout debug:', {
+      bookingId,
+      createdAt: createdAt.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      now: new Date(now).toISOString(),
+      timeoutMs: BOOKING_TIMEOUT_MS,
+      timeoutMinutes: BOOKING_TIMEOUT_MS / (1000 * 60),
+      ageSinceCreation,
+      ageMinutes: Math.floor(ageSinceCreation / (1000 * 60)),
+      timeRemainingMs: timeRemaining,
+      timeRemainingMinutes: Math.floor(timeRemaining / (1000 * 60)),
+      isExpired: timeRemaining === 0,
+      shouldBeExpired: ageSinceCreation > BOOKING_TIMEOUT_MS
+    });
+
+    res.json({
+      createdAt,
+      expiresAt,
+      timeRemaining,
+      expired: timeRemaining === 0,
+      status: booking.paymentStatus
+    });
+  } catch (error) {
+    console.error('Error getting booking timeout:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -185,8 +185,27 @@ export default function NewBooking() {
     navigate('/bookings');
   };
 
-  const handlePaymentCancel = () => {
+  const handlePaymentCancel = async () => {
     setShowPayment(false);
+    
+    // Cancel the booking if it exists
+    if (bookingId) {
+      try {
+        const token = getToken();
+        if (token) {
+          await fetch(`http://localhost:5000/api/bookings/${bookingId}/cancel`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            credentials: 'include'
+          });
+        }
+      } catch (error) {
+        console.error('Error cancelling booking:', error);
+      }
+    }
+    
     setBookingId(null);
   };
 
@@ -210,7 +229,9 @@ export default function NewBooking() {
             origin: trip.route.origin,
             destination: trip.route.destination,
             departureDate: trip.departureDate,
-            departureTime: trip.departureTime
+            departureTime: trip.departureTime,
+            busType: trip.bus.busType.name,
+            busNumber: trip.bus.busNumber
           }}
         />
       ) : (

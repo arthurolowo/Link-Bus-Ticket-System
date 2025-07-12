@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -6,6 +6,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { useToast } from "../hooks/use-toast";
 import { getToken } from "../lib/authUtils";
 import { formatCurrency } from "../lib/utils";
+import { Alert, AlertDescription } from "./ui/alert";
+import { AlertTriangle } from "lucide-react";
 import jsPDF from 'jspdf';
 
 interface PaymentFormProps {
@@ -24,6 +26,8 @@ interface PaymentFormProps {
     destination: string;
     departureDate: string;
     departureTime: string;
+    busType?: string;
+    busNumber?: string;
   };
 }
 
@@ -49,7 +53,116 @@ export default function PaymentForm({
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [bookingExpired, setBookingExpired] = useState(false);
   const { toast } = useToast();
+
+  // Log when component mounts with booking ID
+  useEffect(() => {
+    console.log('PaymentForm mounted with bookingId:', bookingId);
+  }, [bookingId]);
+
+  // Fetch booking timeout and start countdown
+  useEffect(() => {
+    const fetchBookingTimeout = async () => {
+      try {
+        const token = getToken();
+        if (!token) return;
+
+        // Add a small delay to ensure booking is fully created
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/timeout`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Debug logging
+          console.log('Booking timeout response:', {
+            bookingId,
+            ...data,
+            timeRemainingMinutes: Math.floor(data.timeRemaining / (1000 * 60)),
+            formatted: formatTimeRemaining(data.timeRemaining)
+          });
+          
+          // Only set as expired if the server explicitly says it's expired OR time remaining is 0
+          if (data.expired || data.timeRemaining <= 0) {
+            console.log('Booking is expired:', { expired: data.expired, timeRemaining: data.timeRemaining });
+            setTimeRemaining(0);
+            setBookingExpired(true);
+          } else {
+            // Safety check: if time remaining is more than 15 minutes, cap it
+            const maxTimeout = 15 * 60 * 1000; // 15 minutes in ms
+            if (data.timeRemaining > maxTimeout) {
+              console.warn('Booking timeout too high, capping to 15 minutes:', data.timeRemaining);
+              setTimeRemaining(maxTimeout);
+              setBookingExpired(false);
+            } else {
+              setTimeRemaining(data.timeRemaining);
+              setBookingExpired(false);
+            }
+          }
+        } else {
+          console.error('Failed to fetch booking timeout - non-200 response:', response.status, response.statusText);
+          // If we can't fetch timeout info, assume booking is valid for now
+          setTimeRemaining(15 * 60 * 1000); // Default to 15 minutes
+          setBookingExpired(false);
+        }
+      } catch (error) {
+        console.error('Error fetching booking timeout:', error);
+        // If there's an error, assume booking is valid for now
+        setTimeRemaining(15 * 60 * 1000); // Default to 15 minutes
+        setBookingExpired(false);
+      }
+    };
+
+    fetchBookingTimeout();
+
+    // Update countdown every second
+    const interval = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev === null || prev <= 0) {
+          setBookingExpired(true);
+          if (prev !== null && prev > 0) {
+            // Booking just expired
+            toast({
+              title: "Booking Expired",
+              description: "Your booking has expired and seats have been released. Please make a new booking.",
+              variant: "destructive"
+            });
+            setTimeout(() => onPaymentError(), 2000);
+          }
+          return 0;
+        }
+        return prev - 1000;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [bookingId]);
+
+  // Format time remaining
+  const formatTimeRemaining = (ms: number): string => {
+    // Ensure we have a valid positive number
+    const validMs = Math.max(0, Math.floor(ms));
+    
+    // Cap at 15 minutes (900,000 ms) to prevent display issues
+    const cappedMs = Math.min(validMs, 15 * 60 * 1000);
+    
+    const minutes = Math.floor(cappedMs / (1000 * 60));
+    const seconds = Math.floor((cappedMs % (1000 * 60)) / 1000);
+    
+    // Ensure values are reasonable
+    const safeMinutes = Math.min(minutes, 15);
+    const safeSeconds = Math.min(seconds, 59);
+    
+    return `${safeMinutes}:${safeSeconds.toString().padStart(2, '0')}`;
+  };
 
   const validatePaymentRequest = (): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
@@ -138,6 +251,14 @@ export default function PaymentForm({
       currentY += lineHeight;
       doc.text(`Departure Time: ${tripDetails.departureTime}`, 30, currentY);
       currentY += lineHeight;
+      if (tripDetails.busType) {
+        doc.text(`Bus Type: ${tripDetails.busType}`, 30, currentY);
+        currentY += lineHeight;
+      }
+      if (tripDetails.busNumber) {
+        doc.text(`Bus Number: ${tripDetails.busNumber}`, 30, currentY);
+        currentY += lineHeight;
+      }
       doc.text(`Seat(s): ${selectedSeats.join(', ')}`, 30, currentY);
       currentY += lineHeight * 1.5;
       
@@ -343,6 +464,33 @@ export default function PaymentForm({
 
   return (
     <div className="space-y-6">
+      {/* Booking Timeout Warning */}
+      {timeRemaining !== null && !bookingExpired && (
+        <Alert className={`border-2 ${timeRemaining < 5 * 60 * 1000 ? 'border-red-500 bg-red-50' : 'border-yellow-500 bg-yellow-50'}`}>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>
+              {timeRemaining < 5 * 60 * 1000 ? 'Urgent: ' : 'Time Remaining: '}
+              {formatTimeRemaining(timeRemaining)}
+            </strong>
+            <br />
+            Your booking will expire and seats will be released if payment is not completed.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Booking Expired Warning */}
+      {bookingExpired && (
+        <Alert className="border-2 border-red-500 bg-red-50">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Booking Expired</strong>
+            <br />
+            This booking has expired and the seats have been released. Please make a new booking.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Payment Details</CardTitle>
@@ -406,9 +554,11 @@ export default function PaymentForm({
             <Button
               className="w-full"
               onClick={processPayment}
-              disabled={loading || !phoneNumber || !password}
+              disabled={loading || !phoneNumber || !password || bookingExpired}
             >
-              {loading ? (
+              {bookingExpired ? (
+                'Booking Expired'
+              ) : loading ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Processing...
@@ -439,6 +589,18 @@ export default function PaymentForm({
                 {new Date(tripDetails.departureDate).toLocaleDateString()} at {tripDetails.departureTime}
               </p>
             </div>
+            {tripDetails.busType && (
+              <div>
+                <p className="text-sm text-muted-foreground">Bus Type</p>
+                <p className="font-semibold">{tripDetails.busType}</p>
+              </div>
+            )}
+            {tripDetails.busNumber && (
+              <div>
+                <p className="text-sm text-muted-foreground">Bus Number</p>
+                <p className="font-semibold">{tripDetails.busNumber}</p>
+              </div>
+            )}
             <div>
               <p className="text-sm text-muted-foreground">Selected Seats</p>
               <p className="font-semibold">{selectedSeats.join(', ')}</p>

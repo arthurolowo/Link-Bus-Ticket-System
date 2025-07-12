@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../storage.js';
-import { payments, bookings, users, trips, paymentSchema } from '../schema.js';
+import { payments, bookings, users, trips, seats, paymentSchema } from '../schema.js';
 import { eq, sql } from 'drizzle-orm';
 import { auth, AuthRequest, generateToken } from '../middleware/auth.js';
 
@@ -80,8 +80,19 @@ const simulatePayment = async (paymentId: string, amount: string, provider: stri
         .where(eq(payments.id, paymentId));
 
       if (payment) {
-        // Update booking status to failed and release the seat
+        // Update booking status to failed and release all seats
         await db.transaction(async (tx) => {
+          // Get all seats for this booking
+          const bookingSeats = await tx
+            .select()
+            .from(seats)
+            .where(eq(seats.bookingId, payment.bookingId));
+
+          // Delete seat records
+          await tx
+            .delete(seats)
+            .where(eq(seats.bookingId, payment.bookingId));
+
           // Update booking status
           await tx.update(bookings)
             .set({ paymentStatus: 'failed' })
@@ -93,11 +104,11 @@ const simulatePayment = async (paymentId: string, amount: string, provider: stri
             .from(bookings)
             .where(eq(bookings.id, payment.bookingId));
 
-          if (booking) {
-            // Increment available seats back
+          if (booking && bookingSeats.length > 0) {
+            // Increment available seats back by the number of seats that were booked
             await tx.update(trips)
               .set({
-                availableSeats: sql`${trips.availableSeats} + 1`
+                availableSeats: sql`${trips.availableSeats} + ${bookingSeats.length}`
               })
               .where(eq(trips.id, Number(booking.tripId)));
           }

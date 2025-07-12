@@ -232,7 +232,9 @@ export default function SeatSelection() {
           origin: tripData.route.origin,
           destination: tripData.route.destination,
           departureDate: tripData.departureDate,
-          departureTime: tripData.departureTime
+          departureTime: tripData.departureTime,
+          busType: tripData.bus?.busType?.name,
+          busNumber: tripData.bus?.busNumber
         }}
       />
     );

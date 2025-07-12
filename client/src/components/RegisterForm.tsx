@@ -6,6 +6,7 @@ import { Label } from './ui/label';
 import { useToast } from '../hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { useNavigate } from 'react-router-dom';
+import { Alert, AlertDescription } from './ui/alert';
 
 export function RegisterForm() {
   const [formData, setFormData] = useState({
@@ -16,13 +17,34 @@ export function RegisterForm() {
     phone: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [passwordValidation, setPasswordValidation] = useState({
+    minLength: false,
+    hasUppercase: false,
+    hasLowercase: false,
+    hasNumber: false,
+    hasSpecialChar: false,
+  });
   const { register } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  const validatePassword = (password: string) => {
+    setPasswordValidation({
+      minLength: password.length >= 8,
+      hasUppercase: /[A-Z]/.test(password),
+      hasLowercase: /[a-z]/.test(password),
+      hasNumber: /[0-9]/.test(password),
+      hasSpecialChar: /[^A-Za-z0-9]/.test(password),
+    });
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'password') {
+      validatePassword(value);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,6 +54,17 @@ export function RegisterForm() {
       toast({
         title: 'Error',
         description: 'Passwords do not match',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate password requirements
+    const allValid = Object.values(passwordValidation).every(Boolean);
+    if (!allValid) {
+      toast({
+        title: 'Error',
+        description: 'Password does not meet all requirements',
         variant: 'destructive',
       });
       return;
@@ -97,6 +130,31 @@ export function RegisterForm() {
               onChange={handleChange}
               required
             />
+            {formData.password && (
+              <div className="text-sm space-y-1">
+                <div className="font-medium text-gray-700">Password Requirements:</div>
+                <div className={`flex items-center gap-2 ${passwordValidation.minLength ? 'text-green-600' : 'text-red-600'}`}>
+                  <span>{passwordValidation.minLength ? '✓' : '✗'}</span>
+                  <span>At least 8 characters</span>
+                </div>
+                <div className={`flex items-center gap-2 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-red-600'}`}>
+                  <span>{passwordValidation.hasUppercase ? '✓' : '✗'}</span>
+                  <span>One uppercase letter</span>
+                </div>
+                <div className={`flex items-center gap-2 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-red-600'}`}>
+                  <span>{passwordValidation.hasLowercase ? '✓' : '✗'}</span>
+                  <span>One lowercase letter</span>
+                </div>
+                <div className={`flex items-center gap-2 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-red-600'}`}>
+                  <span>{passwordValidation.hasNumber ? '✓' : '✗'}</span>
+                  <span>One number</span>
+                </div>
+                <div className={`flex items-center gap-2 ${passwordValidation.hasSpecialChar ? 'text-green-600' : 'text-red-600'}`}>
+                  <span>{passwordValidation.hasSpecialChar ? '✓' : '✗'}</span>
+                  <span>One special character</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm Password</Label>
