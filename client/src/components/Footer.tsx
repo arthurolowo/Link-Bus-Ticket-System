@@ -60,7 +60,7 @@ export default function Footer() {
         </div>
         
         <div className="border-t border-blue-400 mt-8 pt-8 text-center text-blue-100">
-          <p>&copy; 2024 Link Bus Company. All rights reserved.</p>
+          <p>&copy; 2025 Link Bus Company. All rights reserved.</p>
         </div>
       </div>
     </footer>

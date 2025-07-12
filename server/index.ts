@@ -89,9 +89,6 @@ if (isDev) {
 } else {
   // In production, serve built files
   serveStatic(app);
-  app.get('*', (_req, res) => {
-    res.sendFile('index.html', { root: './dist' });
-  });
   
   app.listen(port, () => {
     log(`Production server running on port ${port}`);
