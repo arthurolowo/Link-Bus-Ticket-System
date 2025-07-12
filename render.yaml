@@ -1,13 +1,8 @@
 services:
-  # PostgreSQL Database
-  - type: pserv
-    name: link-bus-db
-    plan: free
-
   # Web Service (API + Frontend)
   - type: web
     name: link-bus-system
-    env: node
+    runtime: node
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -24,4 +19,9 @@ services:
         generateValue: true
       - key: SESSION_SECRET
         generateValue: true
-    healthCheckPath: /api/health 
+    healthCheckPath: /api/health
+
+databases:
+  # PostgreSQL Database
+  - name: link-bus-db
+    plan: free 
