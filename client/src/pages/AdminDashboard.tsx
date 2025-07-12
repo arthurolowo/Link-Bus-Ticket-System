@@ -29,6 +29,7 @@ import { BusTypeManager } from "../components/admin/BusTypeManager";
 import { BusManager } from "../components/admin/BusManager";
 import { RouteManager } from "../components/admin/RouteManager";
 import { TripManager } from "../components/admin/TripManager";
+import { API_BASE_URL } from '../config/api';
 import {
   Dialog,
   DialogContent,
@@ -41,7 +42,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
-const API_BASE_URL = 'http://localhost:5000';
+// API_BASE_URL imported from config
 
 // Helper function to make authenticated API requests
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {

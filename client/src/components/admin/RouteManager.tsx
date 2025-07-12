@@ -26,7 +26,7 @@ import * as z from 'zod';
 import { getToken } from '../../lib/authUtils';
 import { cn } from '../../lib/utils';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+import { API_BASE_URL } from '../../config/api';
 
 interface Route {
   id: number;
@@ -126,7 +126,7 @@ export function RouteManager() {
     queryFn: async () => {
       try {
         const token = getToken();
-        const response = await fetch(`${API_BASE_URL}/routes`, {
+        const response = await fetch(`${API_BASE_URL}/api/routes`, {
           headers: {
             'Authorization': `Bearer ${token}`
           },
@@ -150,7 +150,7 @@ export function RouteManager() {
     queryFn: async () => {
       try {
         const token = getToken();
-        const response = await fetch(`${API_BASE_URL}/routes/stats`, {
+        const response = await fetch(`${API_BASE_URL}/api/routes/stats`, {
           headers: {
             'Authorization': `Bearer ${token}`
           },
@@ -175,7 +175,7 @@ export function RouteManager() {
       try {
         const token = getToken();
         console.log('Sending route data:', data);
-        const response = await fetch(`${API_BASE_URL}/routes`, {
+        const response = await fetch(`${API_BASE_URL}/api/routes`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -229,7 +229,7 @@ export function RouteManager() {
     mutationFn: async ({ id, data }: { id: number; data: RouteFormData }) => {
       try {
         const token = getToken();
-        const response = await fetch(`${API_BASE_URL}/routes/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/api/routes/${id}`, {
           method: 'PUT',
           headers: { 
             'Content-Type': 'application/json',
@@ -279,7 +279,7 @@ export function RouteManager() {
     mutationFn: async ({ id, isActive }: { id: number; isActive: number }) => {
       try {
         const token = getToken();
-        const response = await fetch(`${API_BASE_URL}/routes/${id}/toggle`, {
+        const response = await fetch(`${API_BASE_URL}/api/routes/${id}/toggle`, {
           method: 'PATCH',
           headers: { 
             'Content-Type': 'application/json',
@@ -321,7 +321,7 @@ export function RouteManager() {
     mutationFn: async (id: number) => {
       try {
         const token = getToken();
-        const response = await fetch(`${API_BASE_URL}/routes/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/api/routes/${id}`, {
           method: 'DELETE',
           headers: { 
             'Authorization': `Bearer ${token}`

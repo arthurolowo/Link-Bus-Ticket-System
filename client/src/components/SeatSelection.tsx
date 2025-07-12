@@ -9,6 +9,7 @@ import PaymentForm from "./PaymentForm";
 import { getToken } from "../lib/authUtils";
 import { formatCurrency } from '../lib/utils';
 import { useToast } from "../hooks/use-toast";
+import { API_BASE_URL } from '../config/api';
 
 interface Seat {
   id: string;
@@ -66,7 +67,7 @@ export default function SeatSelection() {
     try {
       setRefreshing(true);
       const token = getToken();
-      const response = await fetch(`http://localhost:5000/api/trips/${tripData.id}/seats`, {
+      const response = await fetch(`${API_BASE_URL}/api/trips/${tripData.id}/seats`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -142,7 +143,7 @@ export default function SeatSelection() {
         }
 
         // Create booking first
-        const response = await fetch('http://localhost:5000/api/bookings', {
+        const response = await fetch(`${API_BASE_URL}/api/bookings`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

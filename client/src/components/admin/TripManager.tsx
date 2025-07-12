@@ -32,6 +32,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { formatCurrency } from '../../lib/utils';
+import { API_BASE_URL } from '../../config/api';
 
 interface Trip {
   id: number;
@@ -112,7 +113,7 @@ export function TripManager() {
   const { data: trips, isLoading: isLoadingTrips } = useQuery<Trip[]>({
     queryKey: ['trips'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/trips', {
+      const response = await fetch(`${API_BASE_URL}/api/trips`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -126,7 +127,7 @@ export function TripManager() {
   const { data: routes } = useQuery<Route[]>({
     queryKey: ['routes'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/routes', {
+      const response = await fetch(`${API_BASE_URL}/api/routes`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -140,7 +141,7 @@ export function TripManager() {
   const { data: buses } = useQuery<Bus[]>({
     queryKey: ['buses'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/buses', {
+      const response = await fetch(`${API_BASE_URL}/api/buses`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -152,7 +153,7 @@ export function TripManager() {
 
   const addTripMutation = useMutation({
     mutationFn: async (data: TripFormData) => {
-      const response = await fetch('http://localhost:5000/api/trips', {
+      const response = await fetch(`${API_BASE_URL}/api/trips`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -185,7 +186,7 @@ export function TripManager() {
 
   const updateTripMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: TripFormData }) => {
-      const response = await fetch(`http://localhost:5000/api/trips/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/trips/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -218,7 +219,7 @@ export function TripManager() {
 
   const deleteTripMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await fetch(`http://localhost:5000/api/trips/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/trips/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -248,7 +249,7 @@ export function TripManager() {
 
   const updateTripStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      const response = await fetch(`http://localhost:5000/api/trips/${id}/status`, {
+      const response = await fetch(`${API_BASE_URL}/api/trips/${id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

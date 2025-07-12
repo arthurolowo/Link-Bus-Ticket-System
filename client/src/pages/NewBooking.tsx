@@ -9,6 +9,7 @@ import { getToken } from '../lib/authUtils';
 import PaymentForm from '../components/PaymentForm';
 import { Checkbox } from '../components/ui/checkbox';
 import { ScrollArea } from '../components/ui/scroll-area';
+import { API_BASE_URL } from '../config/api';
 
 interface Trip {
   id: number;
@@ -48,7 +49,7 @@ export default function NewBooking() {
     queryKey: ['trip', tripId],
     queryFn: async () => {
       const token = getToken();
-      const response = await fetch(`http://localhost:5000/api/trips/${tripId}`, {
+              const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -139,7 +140,7 @@ export default function NewBooking() {
       }
 
       // Create booking
-      const response = await fetch('http://localhost:5000/api/bookings', {
+              const response = await fetch(`${API_BASE_URL}/api/bookings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -193,7 +194,7 @@ export default function NewBooking() {
       try {
         const token = getToken();
         if (token) {
-          await fetch(`http://localhost:5000/api/bookings/${bookingId}/cancel`, {
+          await fetch(`${API_BASE_URL}/api/bookings/${bookingId}/cancel`, {
             method: 'PATCH',
             headers: {
               'Authorization': `Bearer ${token}`

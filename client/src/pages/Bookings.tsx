@@ -20,6 +20,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '../components/ui/badge';
 import { Skeleton } from '../components/ui/skeleton';
 import { Calendar, Clock, MapPin, Bus, CreditCard, CalendarDays } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 interface BookingResponse {
   booking: {
@@ -93,7 +94,7 @@ export default function Bookings() {
         throw new Error('Authentication required');
       }
 
-      const response = await fetch('http://localhost:5000/api/bookings/my-bookings', {
+      const response = await fetch(`${API_BASE_URL}/api/bookings/my-bookings`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -114,7 +115,7 @@ export default function Bookings() {
   const { data: trip, isLoading: tripLoading, error: tripError } = useQuery<Trip>({
     queryKey: ['trip', tripId],
     queryFn: async () => {
-      const response = await fetch(`http://localhost:5000/api/trips/${tripId}`, {
+              const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}`, {
         credentials: 'include'
       });
       if (!response.ok) {
@@ -199,7 +200,7 @@ export default function Bookings() {
     if (!trip) return;
     
     try {
-      const response = await fetch('http://localhost:5000/api/bookings', {
+              const response = await fetch(`${API_BASE_URL}/api/bookings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -243,7 +244,7 @@ export default function Bookings() {
         return;
       }
 
-      const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/cancel`, {
+              const response = await fetch(`${API_BASE_URL}/api/bookings/${bookingId}/cancel`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,

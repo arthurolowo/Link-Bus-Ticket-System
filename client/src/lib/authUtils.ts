@@ -23,9 +23,10 @@ export interface ErrorResponse {
   errors?: Array<{ message: string }>;
 }
 
+import { API_BASE_URL } from '../config/api';
+
 const TOKEN_KEY = 'auth_token';
 const TOKEN_EXPIRY_KEY = 'auth_token_expiry';
-const API_BASE_URL = 'http://localhost:5000';
 
 export function setToken(token: string, expiresIn: number) {
   localStorage.setItem(TOKEN_KEY, token);

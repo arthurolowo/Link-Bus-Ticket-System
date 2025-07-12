@@ -9,6 +9,7 @@ import { formatCurrency } from "../lib/utils";
 import { Alert, AlertDescription } from "./ui/alert";
 import { AlertTriangle } from "lucide-react";
 import jsPDF from 'jspdf';
+import { API_BASE_URL } from '../config/api';
 
 interface PaymentFormProps {
   bookingId: number;
@@ -72,7 +73,7 @@ export default function PaymentForm({
         // Add a small delay to ensure booking is fully created
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/timeout`, {
+        const response = await fetch(`${API_BASE_URL}/api/bookings/${bookingId}/timeout`, {
           headers: {
             'Authorization': `Bearer ${token}`
           },
@@ -346,7 +347,7 @@ export default function PaymentForm({
         password: '[REDACTED]'
       });
 
-      const response = await fetch('http://localhost:5000/api/payments/initiate', {
+      const response = await fetch(`${API_BASE_URL}/api/payments/initiate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -412,7 +413,7 @@ export default function PaymentForm({
 
     const checkStatus = async (): Promise<boolean> => {
       try {
-        const response = await fetch(`http://localhost:5000/api/payments/${pid}/status`, {
+        const response = await fetch(`${API_BASE_URL}/api/payments/${pid}/status`, {
           headers: {
             'Authorization': `Bearer ${token}`
           },

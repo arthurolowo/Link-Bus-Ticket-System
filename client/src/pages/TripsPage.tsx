@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Skeleton } from '../components/ui/skeleton';
 import { Badge } from '../components/ui/badge';
 import { Clock, Users, ArrowRight } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 interface Trip {
   id: number;
@@ -59,7 +60,7 @@ export default function TripsPage() {
   const { data: busTypes } = useQuery<BusType[]>({
     queryKey: ['busTypes'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/buses/types', {
+              const response = await fetch(`${API_BASE_URL}/api/buses/types`, {
         credentials: 'include'
       });
       if (!response.ok) {
@@ -85,7 +86,7 @@ export default function TripsPage() {
           params.append('origin', searchParams.origin);
           params.append('destination', searchParams.destination);
           params.append('date', searchParams.date);
-          const response = await fetch(`http://localhost:5000/api/trips/search?${params}`, {
+          const response = await fetch(`${API_BASE_URL}/api/trips/search?${params}`, {
             credentials: 'include'
           });
           if (!response.ok) {
@@ -95,7 +96,7 @@ export default function TripsPage() {
         }
         
         // Otherwise, use the main endpoint
-        const response = await fetch(`http://localhost:5000/api/trips${params.toString() ? '?' + params.toString() : ''}`, {
+        const response = await fetch(`${API_BASE_URL}/api/trips${params.toString() ? '?' + params.toString() : ''}`, {
           credentials: 'include'
         });
         if (!response.ok) {

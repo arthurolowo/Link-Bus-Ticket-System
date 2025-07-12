@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
+import { API_BASE_URL } from '../config/api';
 
 interface Route {
   id: number;
@@ -15,7 +16,7 @@ export default function RoutesPage() {
   const { data: routes, isLoading, error } = useQuery<Route[]>({
     queryKey: ['routes'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/routes');
+      const response = await fetch(`${API_BASE_URL}/api/routes`);
       if (!response.ok) {
         throw new Error('Failed to fetch routes');
       }

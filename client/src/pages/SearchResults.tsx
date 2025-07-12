@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BusResults } from '../components/BusResults';
+import { API_BASE_URL } from '../config/api';
 
 interface SearchState {
   from: string;
@@ -63,7 +64,7 @@ export default function SearchResults() {
           ...(searchParams.routeId && { routeId: searchParams.routeId })
         });
 
-        const response = await fetch(`http://localhost:5000/api/trips/search?${params}`);
+        const response = await fetch(`${API_BASE_URL}/api/trips/search?${params}`);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => null);
