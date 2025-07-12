@@ -4,19 +4,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-
-const UGANDAN_CITIES = [
-  'Kampala',
-  'Mbarara',
-  'Gulu',
-  'Jinja',
-  'Mbale',
-  'Fort Portal',
-  'Masaka',
-  'Arua',
-  'Kabale',
-  'Soroti'
-];
+import { useCities } from "../hooks/useCities";
 
 export function SearchForm() {
   const navigate = useNavigate();
@@ -33,6 +21,9 @@ export function SearchForm() {
     date: ''
   });
 
+  // Fetch available cities from routes
+  const { data: availableCities = [], isLoading: citiesLoading, error: citiesError } = useCities();
+
   const validateForm = () => {
     const newErrors = {
       from: '',
@@ -41,8 +32,8 @@ export function SearchForm() {
     };
 
     // Convert input to match city case exactly
-    const fromCity = UGANDAN_CITIES.find(city => city.toLowerCase() === formData.from.toLowerCase());
-    const toCity = UGANDAN_CITIES.find(city => city.toLowerCase() === formData.to.toLowerCase());
+    const fromCity = availableCities.find(city => city.toLowerCase() === formData.from.toLowerCase());
+    const toCity = availableCities.find(city => city.toLowerCase() === formData.to.toLowerCase());
 
     if (!fromCity) {
       newErrors.from = 'Please select a valid departure city';
@@ -95,38 +86,86 @@ export function SearchForm() {
     setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
+  const handleCitySelect = (name: 'from' | 'to', value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  // Show loading state
+  if (citiesLoading) {
+    return (
+      <div className="space-y-6 p-6 bg-white rounded-lg shadow-md">
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <span className="ml-3">Loading available destinations...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (citiesError) {
+    return (
+      <div className="space-y-6 p-6 bg-white rounded-lg shadow-md">
+        <div className="text-center py-8">
+          <p className="text-red-600 mb-4">Failed to load available destinations</p>
+          <Button onClick={() => window.location.reload()}>
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show message if no cities available
+  if (availableCities.length === 0) {
+    return (
+      <div className="space-y-6 p-6 bg-white rounded-lg shadow-md">
+        <div className="text-center py-8">
+          <p className="text-gray-600 mb-4">No routes available at the moment</p>
+          <p className="text-sm text-gray-500">Please check back later or contact support</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6 p-6 bg-white rounded-lg shadow-md">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="from">From</Label>
-          <Input
-            type="text"
-            id="from"
-            name="from"
-            className={errors.from ? 'border-red-500' : ''}
-            placeholder="Departure city"
-            value={formData.from}
-            onChange={handleChange}
-            list="cities"
-            required
-          />
+          <Select value={formData.from} onValueChange={(value) => handleCitySelect('from', value)}>
+            <SelectTrigger className={errors.from ? 'border-red-500' : ''}>
+              <SelectValue placeholder="Select departure city" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableCities.map(city => (
+                <SelectItem key={city} value={city}>
+                  {city}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {errors.from && <p className="text-sm text-red-500">{errors.from}</p>}
         </div>
         
         <div className="space-y-2">
           <Label htmlFor="to">To</Label>
-          <Input
-            type="text"
-            id="to"
-            name="to"
-            className={errors.to ? 'border-red-500' : ''}
-            placeholder="Destination city"
-            value={formData.to}
-            onChange={handleChange}
-            list="cities"
-            required
-          />
+          <Select value={formData.to} onValueChange={(value) => handleCitySelect('to', value)}>
+            <SelectTrigger className={errors.to ? 'border-red-500' : ''}>
+              <SelectValue placeholder="Select destination city" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableCities
+                .filter(city => city !== formData.from) // Exclude selected "from" city
+                .map(city => (
+                  <SelectItem key={city} value={city}>
+                    {city}
+                  </SelectItem>
+                ))
+              }
+            </SelectContent>
+          </Select>
           {errors.to && <p className="text-sm text-red-500">{errors.to}</p>}
         </div>
       </div>
@@ -167,12 +206,6 @@ export function SearchForm() {
       <Button type="submit" className="w-full">
         Search Buses
       </Button>
-
-      <datalist id="cities">
-        {UGANDAN_CITIES.map(city => (
-          <option key={city} value={city} />
-        ))}
-      </datalist>
     </form>
   );
 }

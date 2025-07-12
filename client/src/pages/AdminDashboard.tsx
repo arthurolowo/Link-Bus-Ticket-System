@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -14,25 +14,83 @@ import {
   Route, 
   TrendingUp,
   Users,
-  Search
+  Search,
+  Eye,
+  XCircle,
+  AlertCircle,
+  CheckCircle
 } from "lucide-react";
-import type { Booking, TripWithDetails } from "../types";
 import { useToast } from '../hooks/use-toast';
 import { useAuth } from '../hooks/useAuth';
 import { Navigate } from 'react-router-dom';
 import { formatCurrency } from '../lib/utils';
+import { getToken } from '../lib/authUtils';
 import { BusTypeManager } from "../components/admin/BusTypeManager";
 import { BusManager } from "../components/admin/BusManager";
 import { RouteManager } from "../components/admin/RouteManager";
 import { TripManager } from "../components/admin/TripManager";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
-interface BookingWithDetails extends Booking {
-  passengerName: string;
-  passengerPhone: string;
+const API_BASE_URL = 'http://localhost:5000';
+
+// Helper function to make authenticated API requests
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers,
+  };
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'API request failed');
+  }
+
+  return response.json();
+}
+
+interface AdminBooking {
+  id: number;
   bookingReference: string;
-  paymentStatus: 'completed' | 'pending' | 'failed';
-  bookingStatus: string;
-  trip: TripWithDetails;
+  totalAmount: string;
+  status: 'completed' | 'pending' | 'failed';
+  createdAt: string;
+  passengerName: string;
+  passengerEmail: string;
+  passengerPhone: string;
+  seatNumbers: number[];
+  trip: {
+    id: number;
+    departureDate: string;
+    departureTime: string;
+    arrivalTime: string;
+    fare: string;
+    route: {
+      origin: string;
+      destination: string;
+    };
+    bus: {
+      number: string;
+      type: string;
+    };
+  };
 }
 
 interface AdminStats {
@@ -45,72 +103,140 @@ interface AdminStats {
 const getStatusVariant = (status: string) => {
   switch (status) {
     case 'completed':
-    case 'confirmed':
       return 'default';
     case 'pending':
       return 'secondary';
     case 'failed':
-    case 'cancelled':
       return 'destructive';
     default:
       return 'outline';
   }
 };
 
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case 'completed':
+      return <CheckCircle className="w-4 h-4 text-green-500" />;
+    case 'pending':
+      return <AlertCircle className="w-4 h-4 text-yellow-500" />;
+    case 'failed':
+      return <XCircle className="w-4 h-4 text-red-500" />;
+    default:
+      return <AlertCircle className="w-4 h-4 text-gray-500" />;
+  }
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("");
-  const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("all");
   const [filterPhone, setFilterPhone] = useState("");
   const [filterOrigin, setFilterOrigin] = useState("");
   const [filterDestination, setFilterDestination] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<AdminBooking | null>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
 
   // Redirect non-admin users
   if (!user?.isAdmin) {
     return <Navigate to="/" />;
   }
 
+  // Query for admin stats
   const { data: stats, isLoading: isLoadingStats } = useQuery<AdminStats>({
-    queryKey: ['/api/admin/stats'],
+    queryKey: ['admin-stats'],
+    queryFn: async () => {
+      return apiRequest<AdminStats>('/api/admin/stats');
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 
-  const { data: bookings, isLoading: isLoadingBookings } = useQuery<BookingWithDetails[]>({
-    queryKey: ['/api/admin/bookings'],
+  // Query for bookings
+  const { data: bookings = [], isLoading: isLoadingBookings } = useQuery<AdminBooking[]>({
+    queryKey: ['admin-bookings'],
+    queryFn: async () => {
+      return apiRequest<AdminBooking[]>('/api/admin/bookings');
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchInterval: 15000, // Refetch every 15 seconds
   });
 
-  const filteredBookings = (bookings || []).filter((booking: BookingWithDetails) => {
+  // Mutation for cancelling bookings
+  const cancelBookingMutation = useMutation({
+    mutationFn: async ({ bookingId, reason }: { bookingId: number; reason?: string }) => {
+      return apiRequest(`/api/admin/bookings/${bookingId}/cancel`, {
+        method: 'PATCH',
+        body: JSON.stringify({ reason }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      toast({
+        title: 'Success',
+        description: 'Booking cancelled successfully',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const filteredBookings = bookings.filter((booking: AdminBooking) => {
     // Text search
     const matchesSearch = !searchTerm ||
       booking.bookingReference.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.passengerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.trip.route.origin.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.trip.route.destination.toLowerCase().includes(searchTerm.toLowerCase());
+    
     // Payment status filter
-    const matchesPaymentStatus = !filterPaymentStatus || booking.paymentStatus === filterPaymentStatus;
+    const matchesPaymentStatus = !filterPaymentStatus || filterPaymentStatus === 'all' || booking.paymentStatus === filterPaymentStatus;
+    
     // Booking status filter
-    const matchesStatus = !filterStatus || booking.bookingStatus === filterStatus;
+    const matchesStatus = !filterStatus || filterStatus === 'all' || booking.bookingStatus === filterStatus;
+    
     // Phone filter
     const matchesPhone = !filterPhone || booking.passengerPhone.includes(filterPhone);
+    
     // Origin filter
     const matchesOrigin = !filterOrigin || booking.trip.route.origin === filterOrigin;
+    
     // Destination filter
     const matchesDestination = !filterDestination || booking.trip.route.destination === filterDestination;
+    
     // Date range filter
     const depDate = new Date(booking.trip.departureDate);
     const matchesStartDate = !filterStartDate || depDate >= new Date(filterStartDate);
     const matchesEndDate = !filterEndDate || depDate <= new Date(filterEndDate);
-    return matchesSearch && matchesPaymentStatus && matchesStatus && matchesPhone && matchesOrigin && matchesDestination && matchesStartDate && matchesEndDate;
+    
+    return matchesSearch && matchesPaymentStatus && matchesStatus && matchesPhone && 
+           matchesOrigin && matchesDestination && matchesStartDate && matchesEndDate;
   });
+
+  const handleViewBooking = (booking: AdminBooking) => {
+    setSelectedBooking(booking);
+    setIsViewDialogOpen(true);
+  };
+
+  const handleCancelBooking = async (bookingId: number) => {
+    if (window.confirm('Are you sure you want to cancel this booking?')) {
+      cancelBookingMutation.mutate({ bookingId });
+    }
+  };
 
   const handleAddRouteClick = () => {
     setActiveTab("routes");
-    // The RouteManager component will handle showing the add dialog
   };
 
   const handleExport = () => {
@@ -120,24 +246,36 @@ export default function AdminDashboard() {
         'Booking Reference',
         'Passenger Name',
         'Passenger Phone',
+        'Passenger Email',
         'Payment Status',
         'Booking Status',
         'Origin',
         'Destination',
         'Departure Date',
-        'Amount'
+        'Departure Time',
+        'Bus Number',
+        'Bus Type',
+        'Seats',
+        'Amount',
+        'Created At'
       ].join(',');
 
       const rows = filteredBookings.map(booking => [
         booking.bookingReference,
         booking.passengerName,
         booking.passengerPhone,
+        booking.passengerEmail,
         booking.paymentStatus,
         booking.bookingStatus,
         booking.trip.route.origin,
         booking.trip.route.destination,
         new Date(booking.trip.departureDate).toLocaleDateString(),
-        booking.trip.fare
+        booking.trip.departureTime,
+        booking.trip.bus.number,
+        booking.trip.bus.type,
+        booking.seatNumbers.join(';'),
+        booking.totalAmount,
+        new Date(booking.createdAt).toLocaleString()
       ].join(','));
 
       const csvContent = [headers, ...rows].join('\n');
@@ -165,6 +303,17 @@ export default function AdminDashboard() {
     }
   };
 
+  const clearFilters = () => {
+    setSearchTerm("");
+    setFilterStatus("all");
+    setFilterPaymentStatus("all");
+    setFilterPhone("");
+    setFilterOrigin("");
+    setFilterDestination("");
+    setFilterStartDate("");
+    setFilterEndDate("");
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -178,7 +327,7 @@ export default function AdminDashboard() {
               <Button 
                 className="btn-primary"
                 onClick={handleAddRouteClick}
-                disabled={isLoading}
+                disabled={cancelBookingMutation.isPending}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Route
@@ -186,7 +335,7 @@ export default function AdminDashboard() {
               <Button 
                 variant="outline"
                 onClick={handleExport}
-                disabled={isLoading || isLoadingBookings}
+                disabled={isLoadingBookings}
               >
                 <Download className="w-4 h-4 mr-2" />
                 Export
@@ -222,8 +371,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="mt-4 flex items-center text-sm">
                     <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                    <span className="text-green-600">+12%</span>
-                    <span className="text-muted-foreground ml-1">vs last month</span>
+                    <span className="text-green-600">Live Data</span>
                   </div>
                 </CardContent>
               </Card>
@@ -243,8 +391,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="mt-4 flex items-center text-sm">
                     <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                    <span className="text-green-600">+8%</span>
-                    <span className="text-muted-foreground ml-1">vs last month</span>
+                    <span className="text-green-600">Last 30 Days</span>
                   </div>
                 </CardContent>
               </Card>
@@ -263,9 +410,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="mt-4 flex items-center text-sm">
-                    <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                    <span className="text-green-600">+5%</span>
-                    <span className="text-muted-foreground ml-1">vs last month</span>
+                    <span className="text-muted-foreground">Searchable by users</span>
                   </div>
                 </CardContent>
               </Card>
@@ -284,9 +429,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="mt-4 flex items-center text-sm">
-                    <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                    <span className="text-green-600">+3%</span>
-                    <span className="text-muted-foreground ml-1">vs last month</span>
+                    <span className="text-muted-foreground">Current trips</span>
                   </div>
                 </CardContent>
               </Card>
@@ -296,7 +439,10 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <Card>
                 <CardHeader>
-                  <CardTitle>Recent Bookings</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5" />
+                    Recent Bookings
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {isLoadingBookings ? (
@@ -305,20 +451,27 @@ export default function AdminDashboard() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {bookings?.slice(0, 5).map((booking: BookingWithDetails) => (
-                        <div key={booking.id} className="flex items-center">
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium leading-none">{booking.passengerName}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {booking.trip.route.origin} to {booking.trip.route.destination}
-                            </p>
-                          </div>
-                          <div className="ml-auto flex items-center gap-4">
-                            <div className="flex flex-col items-end">
-                              <p className="text-sm font-medium">UGX {formatCurrency(booking.totalAmount)}</p>
-                              <p className="text-sm text-muted-foreground">{new Date(booking.trip.departureDate).toLocaleDateString()}</p>
+                      {bookings.slice(0, 5).map((booking: AdminBooking) => (
+                        <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            {getStatusIcon(booking.bookingStatus)}
+                            <div>
+                              <p className="text-sm font-medium">{booking.passengerName}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {booking.trip.route.origin} → {booking.trip.route.destination}
+                              </p>
                             </div>
-                            <Badge variant={getStatusVariant(booking.bookingStatus)}>{booking.bookingStatus}</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-right">
+                              <p className="text-sm font-medium">UGX {formatCurrency(booking.totalAmount)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(booking.trip.departureDate).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <Badge variant={getStatusVariant(booking.bookingStatus)}>
+                              {booking.bookingStatus}
+                            </Badge>
                           </div>
                         </div>
                       ))}
@@ -329,25 +482,40 @@ export default function AdminDashboard() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Quick Actions
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <Button className="w-full btn-primary justify-start">
+                    <Button 
+                      className="w-full btn-primary justify-start"
+                      onClick={() => setActiveTab("routes")}
+                    >
                       <Plus className="w-4 h-4 mr-2" />
                       Add New Route
                     </Button>
-                    <Button className="w-full btn-accent justify-start">
+                    <Button 
+                      className="w-full btn-accent justify-start"
+                      onClick={() => setActiveTab("trips")}
+                    >
                       <Calendar className="w-4 h-4 mr-2" />
                       Schedule New Trip
                     </Button>
-                    <Button className="w-full btn-secondary justify-start">
+                    <Button 
+                      className="w-full btn-secondary justify-start"
+                      onClick={() => setActiveTab("buses")}
+                    >
                       <Bus className="w-4 h-4 mr-2" />
                       Manage Buses
                     </Button>
-                    <Button className="w-full btn-secondary justify-start">
+                    <Button 
+                      className="w-full btn-secondary justify-start"
+                      onClick={() => setActiveTab("bookings")}
+                    >
                       <BarChart className="w-4 h-4 mr-2" />
-                      View Analytics
+                      View All Bookings
                     </Button>
                   </div>
                 </CardContent>
@@ -359,97 +527,15 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <CardTitle>All Bookings</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5" />
+                    User Bookings ({filteredBookings.length})
+                  </CardTitle>
                   <div className="flex items-center gap-3">
-                    {activeTab === "bookings" && (
-                      <div className="overflow-x-auto">
-                        {/* Advanced Filters */}
-                        <div className="flex flex-wrap gap-2 md:gap-4 mb-4 items-center">
-                          <input
-                            type="text"
-                            placeholder="Search by reference, name, city..."
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            className="input input-bordered w-full md:w-56"
-                          />
-                          <select
-                            value={filterStatus}
-                            onChange={e => setFilterStatus(e.target.value)}
-                            className="select select-bordered w-full md:w-40"
-                          >
-                            <option value="">All Statuses</option>
-                            <option value="confirmed">Confirmed</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-                          <select
-                            value={filterPaymentStatus}
-                            onChange={e => setFilterPaymentStatus(e.target.value)}
-                            className="select select-bordered w-full md:w-40"
-                          >
-                            <option value="">All Payments</option>
-                            <option value="paid">Paid</option>
-                            <option value="pending">Pending</option>
-                            <option value="failed">Failed</option>
-                          </select>
-                          <input
-                            type="text"
-                            placeholder="Phone"
-                            value={filterPhone}
-                            onChange={e => setFilterPhone(e.target.value)}
-                            className="input input-bordered w-full md:w-32"
-                          />
-                          <select
-                            value={filterOrigin}
-                            onChange={e => setFilterOrigin(e.target.value)}
-                            className="select select-bordered w-full md:w-32"
-                          >
-                            <option value="">All Origins</option>
-                            {Array.from(new Set((bookings||[]).map(b => b.trip.route.origin))).map(origin => (
-                              <option key={origin} value={origin}>{origin}</option>
-                            ))}
-                          </select>
-                          <select
-                            value={filterDestination}
-                            onChange={e => setFilterDestination(e.target.value)}
-                            className="select select-bordered w-full md:w-32"
-                          >
-                            <option value="">All Destinations</option>
-                            {Array.from(new Set((bookings||[]).map(b => b.trip.route.destination))).map(dest => (
-                              <option key={dest} value={dest}>{dest}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="date"
-                            value={filterStartDate}
-                            onChange={e => setFilterStartDate(e.target.value)}
-                            className="input input-bordered w-full md:w-36"
-                            placeholder="Start date"
-                          />
-                          <input
-                            type="date"
-                            value={filterEndDate}
-                            onChange={e => setFilterEndDate(e.target.value)}
-                            className="input input-bordered w-full md:w-36"
-                            placeholder="End date"
-                          />
-                          <button
-                            className="btn btn-outline btn-sm md:ml-2"
-                            onClick={() => {
-                              setFilterStatus("");
-                              setFilterPaymentStatus("");
-                              setFilterPhone("");
-                              setFilterOrigin("");
-                              setFilterDestination("");
-                              setFilterStartDate("");
-                              setFilterEndDate("");
-                            }}
-                          >
-                            Clear Filters
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={clearFilters}>
+                      Clear Filters
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleExport}>
                       <Download className="w-4 h-4 mr-1" />
                       Export
                     </Button>
@@ -457,6 +543,56 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
+                {/* Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <div>
+                    <Label htmlFor="search">Search</Label>
+                    <Input
+                      id="search"
+                      placeholder="Reference, name, city..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="payment-status">Payment Status</Label>
+                    <Select value={filterPaymentStatus} onValueChange={setFilterPaymentStatus}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Payments" />
+                      </SelectTrigger>
+                      <SelectContent>
+                                            <SelectItem value="all">All Payments</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="booking-status">Booking Status</Label>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                                            <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      placeholder="Phone number"
+                      value={filterPhone}
+                      onChange={(e) => setFilterPhone(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 {isLoadingBookings ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
@@ -466,41 +602,78 @@ export default function AdminDashboard() {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-border">
-                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Booking ID</th>
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Reference</th>
                           <th className="text-left py-3 px-4 font-medium text-muted-foreground">Passenger</th>
                           <th className="text-left py-3 px-4 font-medium text-muted-foreground">Route</th>
-                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Date</th>
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Date/Time</th>
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Bus</th>
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Seats</th>
                           <th className="text-left py-3 px-4 font-medium text-muted-foreground">Amount</th>
                           <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
                           <th className="text-left py-3 px-4 font-medium text-muted-foreground">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredBookings.map((b: BookingWithDetails) => (
-                          <tr key={b.id} className="border-b">
-                            <td className="px-6 py-4 font-medium">{b.bookingReference}</td>
-                            <td className="px-6 py-4">{b.passengerName}</td>
-                            <td className="px-6 py-4">
-                              {b.trip.route.origin} to {b.trip.route.destination}
+                        {filteredBookings.map((booking: AdminBooking) => (
+                          <tr key={booking.id} className="border-b hover:bg-muted/50">
+                            <td className="px-4 py-4">
+                              <div className="font-medium text-sm">{booking.bookingReference}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(booking.createdAt).toLocaleDateString()}
+                              </div>
                             </td>
-                            <td className="px-6 py-4">
-                              {new Date(b.trip.departureDate).toLocaleDateString()}
+                            <td className="px-4 py-4">
+                              <div className="font-medium text-sm">{booking.passengerName}</div>
+                              <div className="text-xs text-muted-foreground">{booking.passengerPhone}</div>
                             </td>
-                            <td className="px-6 py-4">UGX {formatCurrency(b.totalAmount)}</td>
-                            <td className="px-6 py-4">
-                              <Badge variant={getStatusVariant(b.bookingStatus)}>
-                                {b.bookingStatus}
-                              </Badge>
+                            <td className="px-4 py-4">
+                              <div className="text-sm">{booking.trip.route.origin}</div>
+                              <div className="text-xs text-muted-foreground">→ {booking.trip.route.destination}</div>
                             </td>
-                            <td className="px-6 py-4">
-                              <Badge variant={getStatusVariant(b.paymentStatus)}>
-                                {b.paymentStatus}
-                              </Badge>
+                            <td className="px-4 py-4">
+                              <div className="text-sm">{new Date(booking.trip.departureDate).toLocaleDateString()}</div>
+                              <div className="text-xs text-muted-foreground">{booking.trip.departureTime}</div>
                             </td>
-                            <td className="px-6 py-4">
-                              <Button variant="outline" size="sm">
-                                View
-                              </Button>
+                            <td className="px-4 py-4">
+                              <div className="text-sm">{booking.trip.bus.number}</div>
+                              <div className="text-xs text-muted-foreground">{booking.trip.bus.type}</div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="text-sm">{booking.seatNumbers.join(', ')}</div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="font-medium text-sm">UGX {formatCurrency(booking.totalAmount)}</div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="flex flex-col gap-1">
+                                <Badge variant={getStatusVariant(booking.bookingStatus)} className="text-xs">
+                                  {booking.bookingStatus}
+                                </Badge>
+                                <Badge variant={getStatusVariant(booking.paymentStatus)} className="text-xs">
+                                  {booking.paymentStatus}
+                                </Badge>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleViewBooking(booking)}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                {booking.bookingStatus !== 'cancelled' && (
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => handleCancelBooking(booking.id)}
+                                    disabled={cancelBookingMutation.isPending}
+                                  >
+                                    <XCircle className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -528,6 +701,85 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Booking Details Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Booking Details</DialogTitle>
+            <DialogDescription>
+              View complete booking information
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBooking && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Booking Reference</Label>
+                  <p className="text-sm">{selectedBooking.bookingReference}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Created</Label>
+                  <p className="text-sm">{new Date(selectedBooking.createdAt).toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Passenger Name</Label>
+                  <p className="text-sm">{selectedBooking.passengerName}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Phone</Label>
+                  <p className="text-sm">{selectedBooking.passengerPhone}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Email</Label>
+                  <p className="text-sm">{selectedBooking.passengerEmail}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Total Amount</Label>
+                  <p className="text-sm font-medium">UGX {formatCurrency(selectedBooking.totalAmount)}</p>
+                </div>
+              </div>
+              
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-3">Trip Details</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Route</Label>
+                    <p className="text-sm">{selectedBooking.trip.route.origin} → {selectedBooking.trip.route.destination}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Date</Label>
+                    <p className="text-sm">{new Date(selectedBooking.trip.departureDate).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Departure</Label>
+                    <p className="text-sm">{selectedBooking.trip.departureTime}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Bus</Label>
+                    <p className="text-sm">{selectedBooking.trip.bus.number} ({selectedBooking.trip.bus.type})</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Seats</Label>
+                    <p className="text-sm">{selectedBooking.seatNumbers.join(', ')}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Status</Label>
+                    <div className="flex gap-2">
+                      <Badge variant={getStatusVariant(selectedBooking.bookingStatus)}>
+                        {selectedBooking.bookingStatus}
+                      </Badge>
+                      <Badge variant={getStatusVariant(selectedBooking.paymentStatus)}>
+                        {selectedBooking.paymentStatus}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

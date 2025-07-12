@@ -86,6 +86,7 @@ async function seed() {
         departure_time VARCHAR(5) NOT NULL,
         arrival_time VARCHAR(5) NOT NULL,
         price VARCHAR(16) NOT NULL,
+        fare VARCHAR(16) NOT NULL,
         available_seats INTEGER,
         status VARCHAR(32) DEFAULT 'scheduled'
       )
@@ -98,6 +99,7 @@ async function seed() {
         trip_id INTEGER REFERENCES trips(id),
         booking_reference VARCHAR(64) NOT NULL,
         payment_status VARCHAR(32) DEFAULT 'pending',
+        status VARCHAR(32) DEFAULT 'pending',
         total_amount VARCHAR(16),
         qr_code VARCHAR(256),
         created_at TIMESTAMPTZ DEFAULT NOW()
@@ -274,13 +276,16 @@ async function seed() {
                         150; // Economy
         const price = Math.ceil((route.distance * baseRate) / 1000) * 1000;
         
-        tripInserts.push(`(${route.id}, ${bus.id}, '${dateString}', '${departureTime}', '${arrivalTime}', '${price}', ${bus.seats}, 'scheduled')`);
+        // Calculate fare (could be different from price - e.g., with taxes, fees, etc.)
+        const fare = price; // For now, fare equals price
+        
+        tripInserts.push(`(${route.id}, ${bus.id}, '${dateString}', '${departureTime}', '${arrivalTime}', '${price}', '${fare}', ${bus.seats}, 'scheduled')`);
       }
     }
     
     // Insert all trips at once
     await db.execute(sql`
-      INSERT INTO trips (route_id, bus_id, departure_date, departure_time, arrival_time, price, available_seats, status) 
+      INSERT INTO trips (route_id, bus_id, departure_date, departure_time, arrival_time, price, fare, available_seats, status) 
       VALUES ${sql.raw(tripInserts.join(', '))}
     `);
     

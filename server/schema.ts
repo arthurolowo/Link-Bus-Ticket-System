@@ -61,6 +61,7 @@ export const trips = pgTable('trips', {
   departureTime: varchar('departure_time', { length: 5 }).notNull(),
   arrivalTime: varchar('arrival_time', { length: 5 }).notNull(),
   price: varchar('price', { length: 10 }).notNull(),
+  fare: varchar('fare', { length: 10 }).notNull(),
   availableSeats: integer('available_seats'),
   status: varchar('status', { length: 32 }).default('scheduled'),
 });
@@ -72,6 +73,7 @@ export const bookings = pgTable('bookings', {
   tripId: integer('trip_id').references(() => trips.id),
   bookingReference: varchar('booking_reference', { length: 32 }).notNull(),
   paymentStatus: varchar('payment_status', { length: 32 }).default('pending'),
+  status: varchar('status', { length: 32 }).default('pending'),
   totalAmount: varchar('total_amount', { length: 10 }),
   qrCode: varchar('qr_code', { length: 256 }),
   createdAt: timestamp('created_at').defaultNow(),

@@ -21,6 +21,7 @@ import routesRouter from './routes/routes.js';
 import busesRouter from './routes/buses.js';
 import bookingsRouter from './routes/bookings.js';
 import paymentsRoutes from './routes/payments';
+import adminRouter from './routes/admin.js';
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.use('/bus-types', (req, res, next) => {
 }, busesRouter);
 router.use('/bookings', bookingsRouter);
 router.use('/payments', paymentsRoutes);
+router.use('/admin', adminRouter);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api', router);
