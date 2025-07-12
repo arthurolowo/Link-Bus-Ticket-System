@@ -13,6 +13,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'client/src'),
     },
   },
+  css: {
+    postcss: {
+      config: path.resolve(__dirname, 'postcss.config.js'),
+    },
+  },
   build: {
     outDir: '../dist/server/public',
     emptyOutDir: true,
